@@ -1,0 +1,282 @@
+// Inbound Ideas — Prisma schema
+// See PRD section 34 (Database Entities) for the model this implements.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// User
+// ─────────────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+
+  preferences   UserPreference[]
+  llmProviders  LLMProvider[]
+  sources       Source[]
+  contextSources ContextSource[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sources (section 14, 24) — abstraction over inbound material producers
+// ─────────────────────────────────────────────────────────────────────────
+
+enum SourceType {
+  LINKEDIN_SAVED_POSTS
+  GOOGLE_SHEET
+  GOOGLE_DRIVE_DOCUMENT
+  GOOGLE_DRIVE_FOLDER
+}
+
+enum SourcePriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Source {
+  id               String         @id @default(cuid())
+  userId           String
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type             SourceType
+  name             String
+  enabled          Boolean        @default(true)
+  // Free-form connector configuration (spreadsheet id, folder id, column mapping, etc).
+  config           Json           @default("{}")
+  tags             String[]       @default([])
+  priority         SourcePriority @default(MEDIUM)
+  refreshFrequencyMinutes Int     @default(1440)
+  lastRefreshedAt  DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  items SourceItem[]
+
+  @@index([userId])
+}
+
+model SourceItem {
+  id          String   @id @default(cuid())
+  sourceId    String
+  source      Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  externalId  String // stable id/url from the origin system, used for de-dup
+  sourceType  SourceType
+  title       String
+  content     String
+  url         String?
+  author      String?
+  contentHash String // sha256 of normalized content, used for de-dup
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) // when the item originated (e.g. saved on LinkedIn)
+  importedAt  DateTime @default(now())
+
+  ideaLinks IdeaSourceItem[]
+
+  @@unique([sourceId, externalId])
+  @@index([contentHash])
+  @@index([sourceId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Context layer (section 10, 11, 12, 20, 25)
+// ─────────────────────────────────────────────────────────────────────────
+
+enum ContextSourceType {
+  GOOGLE_DRIVE_DOCUMENT
+  GOOGLE_DRIVE_FOLDER
+  GOOGLE_SHEET
+}
+
+model ContextSource {
+  id           String            @id @default(cuid())
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  type         ContextSourceType
+  externalId   String // Google Drive file/folder id or Sheet id
+  url          String?
+  tags         String[]          @default([])
+  priority     SourcePriority    @default(MEDIUM)
+  instructions String?
+  enabled      Boolean           @default(true)
+  lastIndexedAt DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  documents ContextDocument[]
+
+  @@index([userId])
+}
+
+model ContextDocument {
+  id              String        @id @default(cuid())
+  contextSourceId String
+  contextSource   ContextSource @relation(fields: [contextSourceId], references: [id], onDelete: Cascade)
+  externalId      String
+  title           String
+  content         String
+  url             String?
+  tags            String[]      @default([])
+  updatedAt       DateTime      @updatedAt
+  createdAt       DateTime      @default(now())
+
+  ideaLinks IdeaContextDocument[]
+
+  @@unique([contextSourceId, externalId])
+  @@index([contextSourceId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Ideas (section 15, 16, 9)
+// ─────────────────────────────────────────────────────────────────────────
+
+enum IdeaStatus {
+  NEW
+  SURFACED
+  EXPLORING
+  EXPLORED
+  PARKED
+  ARCHIVED
+}
+
+model Idea {
+  id               String     @id @default(cuid())
+  title            String
+  summary          String
+  observation      String
+  whyRelevant      String
+  potentialThesis  String
+  angles           Json       @default("[]") // Angle[] — { label, description }
+  topics           String[]   @default([])
+  score            Float      @default(0)
+  status           IdeaStatus @default(NEW)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  lastExploredAt   DateTime?
+
+  sourceItems      IdeaSourceItem[]
+  contextDocuments IdeaContextDocument[]
+  sessions         Session[]
+  feedback         Feedback[]
+
+  @@index([status])
+  @@index([score])
+}
+
+model IdeaSourceItem {
+  ideaId       String
+  idea         Idea       @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  sourceItemId String
+  sourceItem   SourceItem @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
+
+  @@id([ideaId, sourceItemId])
+}
+
+model IdeaContextDocument {
+  ideaId            String
+  idea              Idea            @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  contextDocumentId String
+  contextDocument   ContextDocument @relation(fields: [contextDocumentId], references: [id], onDelete: Cascade)
+  relevance         Float           @default(0)
+
+  @@id([ideaId, contextDocumentId])
+}
+
+enum FeedbackSignal {
+  INTERESTING
+  NOT_INTERESTING
+  EXPLORE
+  PARK
+  ARCHIVE
+}
+
+model Feedback {
+  id        String         @id @default(cuid())
+  ideaId    String
+  idea      Idea           @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  signal    FeedbackSignal
+  createdAt DateTime       @default(now())
+
+  @@index([ideaId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// LLM providers (section 17, 26) and ideation sessions (section 21, 22)
+// ─────────────────────────────────────────────────────────────────────────
+
+enum LLMProviderKind {
+  OPENAI
+  ANTHROPIC
+  GOOGLE
+  OPENAI_COMPATIBLE
+}
+
+model LLMProvider {
+  id             String          @id @default(cuid())
+  userId         String
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind           LLMProviderKind
+  name           String
+  // Encrypted at rest — see src/lib/crypto.ts. Never returned to the client.
+  apiKeyEncrypted String?
+  baseUrl        String?
+  defaultModel   String
+  temperature    Float?          @default(0.7)
+  maxTokens      Int?            @default(2048)
+  systemPrompt   String?
+  isDefault      Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  sessions Session[]
+
+  @@index([userId])
+}
+
+enum SessionStatus {
+  STARTED
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+model Session {
+  id                String        @id @default(cuid())
+  ideaId            String
+  idea              Idea          @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  llmProviderId     String?
+  llmProvider       LLMProvider?  @relation(fields: [llmProviderId], references: [id], onDelete: SetNull)
+  llmModel          String
+  startedAt         DateTime      @default(now())
+  externalChatUrl   String?
+  status            SessionStatus @default(STARTED)
+  notes             String?
+  promptText        String // the generated launch prompt, always preserved
+  contextDocumentIds String[]     @default([]) // audit trail: which context docs were included
+
+  @@index([ideaId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// User preferences (section 16 ranking weights, 19/27 ideation prompt, 23 general)
+// ─────────────────────────────────────────────────────────────────────────
+
+model UserPreference {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key    String
+  value  Json
+
+  @@unique([userId, key])
+}
