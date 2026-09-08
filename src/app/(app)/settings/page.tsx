@@ -3,6 +3,7 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { fetchJson, postJson } from "@/lib/api-client";
+import { SettingsSubNav } from "@/components/settings-subnav";
 
 interface RankingWeights {
   interestingness: number;
@@ -34,7 +35,14 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
+      <div className="mb-6">
+        <SettingsSubNav />
+      </div>
+
       <h1 className="text-xl font-semibold text-neutral-900">Settings</h1>
+      <p className="mt-1 text-sm text-neutral-500">
+        How often to surface ideas, how they&apos;re ranked, and the instructions handed to your LLM.
+      </p>
 
       <div className="mt-4 flex gap-1">
         {(["general", "ranking", "prompt"] as Tab[]).map((t) => (

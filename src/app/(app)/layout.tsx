@@ -5,11 +5,7 @@ const NAV_ITEMS = [
   { href: "/inbox", label: "Inbox" },
   { href: "/ideas", label: "Ideas" },
   { href: "/sessions", label: "Sessions" },
-  { href: "/sources", label: "Sources" },
-  { href: "/context", label: "Context" },
-  { href: "/llm", label: "LLM" },
-  { href: "/usage", label: "Usage" },
-  { href: "/settings", label: "Settings" },
+  { href: "/settings", label: "Settings", activePaths: ["/sources", "/context", "/llm", "/usage"] },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -21,7 +17,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="flex flex-1 flex-col gap-1">
           {NAV_ITEMS.map((item) => (
-            <NavLink key={item.href} href={item.href}>
+            <NavLink key={item.href} href={item.href} activePaths={item.activePaths}>
               {item.label}
             </NavLink>
           ))}

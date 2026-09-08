@@ -32,6 +32,9 @@ export default function IdeasPage() {
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">
       <h1 className="text-xl font-semibold text-neutral-900">Ideas</h1>
+      <p className="mt-1 text-sm text-neutral-500">
+        Every idea that&apos;s ever been surfaced, at any stage. Filter by status, search, or sort to find one again.
+      </p>
 
       <div className="mt-4 flex flex-wrap gap-1">
         {STATUS_TABS.map((tab) => (

@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
 import { fetchJson, postJson } from "@/lib/api-client";
+import { SettingsSubNav } from "@/components/settings-subnav";
 import { suggestPricing } from "@/lib/llm/pricing";
 import type { LLMProvider, LLMProviderKind } from "@/lib/types";
 
@@ -232,15 +232,14 @@ export default function LLMPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
+      <div className="mb-6">
+        <SettingsSubNav />
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-neutral-900">LLM Providers</h1>
-          <p className="mt-1 text-sm text-neutral-500">
-            Where ideation sessions get launched, and which model helps surface ideas.{" "}
-            <Link href="/usage" className="underline">
-              See usage &amp; cost →
-            </Link>
-          </p>
+          <p className="mt-1 text-sm text-neutral-500">Where ideation sessions get launched, and which model helps surface ideas.</p>
         </div>
         <button onClick={() => setShowForm((v) => !v)} className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-800">
           + Add Provider

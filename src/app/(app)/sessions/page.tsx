@@ -11,7 +11,10 @@ export default function SessionsPage() {
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
       <h1 className="text-xl font-semibold text-neutral-900">Ideation Sessions</h1>
-      <p className="mt-1 text-sm text-neutral-500">Every idea you&apos;ve launched into a chat, and where to find it again.</p>
+      <p className="mt-1 text-sm text-neutral-500">
+        Every idea you&apos;ve sent to an LLM to explore. Hit Open to reopen that chat, or check here before
+        re-exploring something you&apos;ve already covered.
+      </p>
 
       <div className="mt-6 space-y-3">
         {sessions?.length === 0 && (

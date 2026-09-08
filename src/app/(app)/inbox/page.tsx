@@ -33,6 +33,10 @@ export default function InboxPage() {
         <div>
           <h1 className="text-xl font-semibold text-neutral-900">Inbound</h1>
           <p className="mt-1 text-sm text-neutral-500">
+            New ideas surfaced from your sources. Explore one worth thinking about, or mark it Interesting, Park, or
+            Archive to clear it out.
+          </p>
+          <p className="mt-1 text-xs text-neutral-400">
             {ideas ? `${ideas.length} item${ideas.length === 1 ? "" : "s"} worth exploring` : "Loading…"}
           </p>
         </div>
