@@ -74,7 +74,7 @@ export default function IdeaDetailPage({ params }: { params: Promise<{ id: strin
 
       <h1 className="mt-2 text-2xl font-semibold text-neutral-900">{idea.title}</h1>
       <p className="mt-1 text-sm text-neutral-500">
-        {source ? `${source.source.name} · ${source.sourceType.replaceAll("_", " ").toLowerCase()}` : "Inbound"}
+        {source ? source.source.name : "Inbound"}
         {source?.url && (
           <>
             {" · "}

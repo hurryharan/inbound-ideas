@@ -44,9 +44,7 @@ export function IdeaCard({ idea, onChange }: { idea: Idea; onChange?: () => void
           <Link href={`/ideas/${idea.id}`} className="text-base font-semibold text-neutral-900 hover:underline">
             {idea.title}
           </Link>
-          <p className="mt-0.5 text-xs text-neutral-500">
-            {source ? `${source.source.name} · ${source.sourceType.replaceAll("_", " ").toLowerCase()}` : "Inbound"}
-          </p>
+          <p className="mt-0.5 text-xs text-neutral-500">{source ? source.source.name : "Inbound"}</p>
         </div>
         <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLOR[idea.status]}`}>
           {STATUS_LABEL[idea.status]}

@@ -34,7 +34,7 @@ Frontend (Next.js pages, client components + SWR)
    ▼
 API routes (src/app/api/**)
    │
-   ├── Source connectors     src/lib/sources/*      (LinkedIn CSV/JSON import, Google Sheets)
+   ├── Source connector      src/lib/sources/*      (Google Sheets — every Source is a sheet)
    ├── Context retrieval     src/lib/ideas/context-matching.ts, src/lib/context/*
    ├── Idea engine           src/lib/ideas/*         (topics, angles, scoring, generation, prompt)
    ├── LLM adapters          src/lib/llm/*           (OpenAI / Anthropic / Google / compatible)
@@ -44,10 +44,15 @@ API routes (src/app/api/**)
 
 Key design decisions, matching the product spec:
 
-- **Source abstraction.** Every connector normalizes into the same
-  `NormalizedItem` shape (`src/lib/sources/types.ts`). The idea engine never
-  depends on LinkedIn or Sheets specifically — a future connector (RSS,
-  Twitter/X, a browser extension) only needs to produce that shape.
+- **One connector, not one per platform.** Every Source is a Google Sheet
+  (`src/lib/sources/google-sheet.ts`) — LinkedIn, Twitter, or anything else
+  becomes a source by periodically exporting into a sheet, rather than the
+  app maintaining a bespoke connector per platform. Rows normalize into a
+  shared `NormalizedItem` shape (`src/lib/sources/types.ts`), and column
+  mapping is auto-detected from the header row (title/content/URL/topic/
+  author, matched against common aliases) so adding a source is just a
+  name + spreadsheet URL — no per-column setup unless detection gets it
+  wrong, in which case it's editable per PRD section 12.
 - **LLM provider abstraction.** `src/lib/llm/index.ts` builds an `LLMAdapter`
   from a stored `LLMProvider` row; nothing else in the app knows which
   provider is configured. If no provider is configured at all, idea
@@ -80,7 +85,45 @@ npm install
 > 'edgesOut')`, that's a known npm/arborist bug unrelated to this project —
 > retry with `npm install --legacy-peer-deps`.
 
-### 2. Configure environment variables
+### 2. Set up Postgres
+
+All this needs is a running Postgres server and a connection string — the
+app creates its own schema via Prisma migrations, nothing to configure by
+hand. Pick one:
+
+**Option A — Neon (recommended: free, hosted, nothing to install)**
+
+1. [neon.tech](https://neon.tech) → sign up → **New Project**.
+2. Copy the connection string it gives you (looks like
+   `postgresql://user:pass@ep-xxx.neon.tech/dbname?sslmode=require`).
+3. Use that as `DATABASE_URL` in the next step. This works for local dev
+   and, later, for a Vercel deployment — same string, or a second Neon
+   project if you want dev/prod separated.
+
+**Option B — Docker, on your own machine**
+
+```bash
+docker run --name inbound-ideas-db \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=inbound_ideas \
+  -p 5432:5432 -d postgres:16
+```
+
+`DATABASE_URL="postgresql://postgres:postgres@localhost:5432/inbound_ideas"`.
+Requires Docker installed and running; data is lost if you remove the
+container without attaching a volume.
+
+**Option C — Native install, no Docker (Debian/Ubuntu)**
+
+```bash
+sudo apt-get install -y postgresql
+sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+sudo -u postgres psql -c "CREATE DATABASE inbound_ideas;"
+```
+
+Same connection string as Option B, pointing at `localhost`.
+
+### 3. Configure environment variables
 
 ```bash
 cp .env.example .env
@@ -88,7 +131,7 @@ cp .env.example .env
 
 At minimum, set:
 
-- `DATABASE_URL` — your Postgres connection string
+- `DATABASE_URL` — the connection string from step 2
 - `APP_PASSWORD` — the password used to sign in
 - `SESSION_SECRET` — any long random string
 - `ENCRYPTION_KEY` — 32 bytes, base64-encoded: `openssl rand -base64 32`
@@ -97,7 +140,7 @@ Google OAuth and LLM provider keys can be added later from the app's
 Settings UI, or set here to have them ready at first run. See
 [Google OAuth setup](#google-oauth-setup) below.
 
-### 3. Set up the database
+### 4. Apply the schema
 
 ```bash
 npx prisma migrate deploy   # applies committed migrations
@@ -107,7 +150,7 @@ npm run db:seed             # optional: loads a demo dataset (12 ideas, context,
 For schema changes during development, use `npx prisma migrate dev` instead
 of `deploy`.
 
-### 4. Run it
+### 5. Run it
 
 ```bash
 npm run dev
@@ -116,7 +159,7 @@ npm run dev
 Visit `http://localhost:3000`, sign in with `APP_PASSWORD`, and you'll land
 on the Inbox — populated with the seed dataset if you ran `db:seed`.
 
-### 5. Run tests
+### 6. Run tests
 
 ```bash
 npm test
@@ -142,18 +185,20 @@ Sheet inbound sources with live refresh.
 
 ## Connecting real sources
 
-- **LinkedIn Saved Posts:** Sources → Add Source → LinkedIn Saved Posts,
-  then use **Import CSV/JSON** on that source. LinkedIn has no public API
-  for saved posts, so export/copy your saved posts into a CSV with columns
-  like `title, text/content, url, author, date` (headers are matched
-  case-insensitively; extra columns are ignored) or an equivalent JSON
-  array. A browser extension or an official API integration can replace
-  this later without touching anything downstream — see
-  `src/lib/sources/linkedin.ts`.
-- **Google Sheet:** Sources → Add Source → Google Sheet, paste the sheet
-  URL, and map your columns (title/body/topic/URL) to your sheet's actual
-  headers. If the sheet's structure changes, edit the source and remap —
-  no code change needed.
+- **Any source (LinkedIn, Twitter, anything):** Sources → Add Source →
+  give it a name (e.g. "LinkedIn Saved Posts"), paste a Google Sheet URL,
+  and set the sheet name. That's it — column mapping (title/content/URL/
+  topic/author) is auto-detected from the sheet's header row on first
+  refresh against common aliases (`Title`/`Text`/`Content`, `URL`/`Link`,
+  etc. — see `COLUMN_ALIASES` in `src/lib/sources/google-sheet.ts`). If
+  detection picks the wrong column, or your sheet uses unusual headers,
+  hit **Edit mapping** on that source and set it explicitly — no code
+  change needed, per PRD section 12.
+
+  Since LinkedIn has no public API for saved posts, populate the sheet by
+  hand, via a browser extension, or with an export/automation tool
+  (Zapier, IFTTT, Apps Script) — whatever gets rows into the sheet. The
+  app only ever reads it.
 - **Context (Google Drive):** Context → Add Source, paste a Drive folder or
   document URL, tag it (e.g. `company`, `product`, `governance`), and set a
   priority. The idea engine matches an idea's topics against these tags to
@@ -177,17 +222,64 @@ the clipboard + a generic provider URL.
 
 ### Option A — Vercel + managed Postgres
 
-1. Push this repo to GitHub and import it into Vercel.
-2. Provision Postgres (Vercel Postgres, Neon, Supabase, RDS — any standard
-   Postgres works) and set `DATABASE_URL` in Vercel's environment variables.
-3. Set the remaining variables from `.env.example` (`APP_PASSWORD`,
-   `SESSION_SECRET`, `ENCRYPTION_KEY`, Google/LLM keys as needed).
-   Set `GOOGLE_REDIRECT_URI` and `NEXT_PUBLIC_APP_URL` to your production
-   domain.
-4. Run `npx prisma migrate deploy` against the production database (a
-   Vercel build step or a one-off job) before or during first deploy.
-5. Deploy. Vercel builds with `npm run build` and serves `npm run start`
-   automatically.
+1. **Import the repo.** [vercel.com/new](https://vercel.com/new) → import
+   this GitHub repo. Framework preset auto-detects Next.js — leave the
+   build/output settings as-is for now (revisited in step 4).
+
+2. **Provision Postgres and get a connection string.** Any standard
+   Postgres works — Vercel Postgres (Storage tab → Create Database →
+   Postgres), Neon, or Supabase are the common choices. Copy the pooled
+   connection string it gives you; that's your `DATABASE_URL`.
+
+3. **Set environment variables.** In the project → **Settings →
+   Environment Variables**, add each of these for the **Production**
+   environment (and Preview, if you want preview deployments to work too).
+   This is the step that fixes `APP_PASSWORD is not configured on the
+   server` / `SESSION_SECRET is not set` errors — those aren't generated by
+   the app, you set them here:
+
+   | Variable | Value |
+   |---|---|
+   | `DATABASE_URL` | the connection string from step 2 |
+   | `APP_PASSWORD` | any password you choose — this is what you'll type on the login screen |
+   | `SESSION_SECRET` | a long random string, e.g. output of `openssl rand -hex 32` |
+   | `ENCRYPTION_KEY` | 32 random bytes, e.g. output of `openssl rand -base64 32` |
+   | `NEXT_PUBLIC_APP_URL` | your production URL, e.g. `https://your-app.vercel.app` |
+   | `GOOGLE_REDIRECT_URI` | `https://your-app.vercel.app/api/context/google/callback` (only if using Google) |
+   | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | from Google Cloud Console (optional, can add later) |
+   | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_AI_API_KEY` | optional — LLM providers can also be added later from the app's Settings UI |
+
+   Run the two `openssl` commands locally to generate `SESSION_SECRET` and
+   `ENCRYPTION_KEY` — paste the output directly into Vercel's value field,
+   don't reuse the placeholder values from `.env.example`.
+
+4. **Make the build apply migrations.** Vercel's default build command
+   (`next build`) won't touch your database, so the first deploy will boot
+   against an empty schema. Override the build command in **Settings →
+   Build & Development Settings → Build Command** to:
+
+   ```
+   npx prisma migrate deploy && next build
+   ```
+
+   This runs on every deploy — safe, since `migrate deploy` is a no-op once
+   the schema is current. (`prisma generate` runs automatically via this
+   repo's `postinstall` script, so you don't need to add that separately.)
+
+5. **Deploy**, then open the deployment URL and log in with whatever you
+   set `APP_PASSWORD` to.
+
+6. **Optional: load the seed dataset.** Vercel won't run this for you. From
+   your machine, with `DATABASE_URL` pointed at the production database:
+
+   ```bash
+   DATABASE_URL="<production connection string>" npm run db:seed
+   ```
+
+**Changed an environment variable after the first deploy?** Vercel only
+picks up new env var values on the *next* build — go to **Deployments**,
+open the latest one, and **Redeploy** (or push a new commit). Editing the
+variable alone does not restart the running deployment.
 
 ### Option B — Single Docker deployment
 
@@ -221,7 +313,7 @@ prisma/schema.prisma       Database schema (see PRD section 34 for the entity li
 prisma/seed.ts             Dev seed dataset
 src/app/(app)/**           Authenticated pages (Inbox, Ideas, Sessions, Sources, Context, LLM, Settings)
 src/app/api/**             REST-ish API routes
-src/lib/sources/**         Source connector framework + LinkedIn/Sheets connectors
+src/lib/sources/**         Google Sheets connector (every Source is a sheet), dedup
 src/lib/google/**          Google OAuth + Drive
 src/lib/ideas/**           Topic extraction, context matching, scoring, idea generation, prompt building
 src/lib/llm/**             LLM provider adapters + launch/deep-link resolution

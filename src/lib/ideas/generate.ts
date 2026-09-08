@@ -15,7 +15,7 @@ export interface GeneratedIdeaFields {
 export interface SourceItemLike {
   title: string;
   content: string;
-  sourceType: string;
+  sourceName: string;
 }
 
 export interface ContextDocLike {
@@ -79,7 +79,7 @@ export async function generateIdeaWithLLM(
       ? matchedContext.map((d) => `- ${d.title} (tags: ${d.tags.join(", ")})`).join("\n")
       : "(none configured)";
 
-  const userPrompt = `SOURCE TYPE: ${item.sourceType}
+  const userPrompt = `SOURCE: ${item.sourceName}
 TITLE: ${item.title}
 
 CONTENT:

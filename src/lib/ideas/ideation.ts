@@ -28,9 +28,7 @@ export async function prepareIdeation(userId: string, ideaId: string, llmProvide
   const template = await getIdeationPrompt(userId);
 
   const primarySourceItem = idea.sourceItems[0]?.sourceItem;
-  const sourceLabel = primarySourceItem
-    ? `${primarySourceItem.source.name} (${primarySourceItem.sourceType.replaceAll("_", " ").toLowerCase()})`
-    : "Inbound Ideas";
+  const sourceLabel = primarySourceItem?.source.name ?? "Inbound Ideas";
 
   const prompt = buildIdeationPrompt({
     instructionTemplate: template,

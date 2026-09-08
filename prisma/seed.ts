@@ -93,14 +93,18 @@ async function main() {
     }),
   ]);
 
-  // ── Sources ───────────────────────────────────────────────────────────
+  // ── Sources (every source is a Google Sheet; the name says what it is) ─
   const linkedinSource = await prisma.source.create({
     data: {
       userId: user.id,
-      type: "LINKEDIN_SAVED_POSTS",
       name: "LinkedIn Saved Posts",
       enabled: true,
-      config: { lastImportFilename: "seed-demo-import.csv" },
+      config: {
+        spreadsheetId: "seed-linkedin-sheet",
+        spreadsheetUrl: "https://docs.google.com/spreadsheets/d/seed-linkedin-sheet",
+        sheetName: "Saved Posts",
+        columnMapping: { title: "Title", body: "Text", sourceUrl: "URL", author: "Author" },
+      },
       tags: ["linkedin"],
       priority: "HIGH",
     },
@@ -109,11 +113,11 @@ async function main() {
   const sheetSource = await prisma.source.create({
     data: {
       userId: user.id,
-      type: "GOOGLE_SHEET",
       name: "Content Ideas Sheet",
       enabled: true,
       config: {
         spreadsheetId: "seed-demo-sheet",
+        spreadsheetUrl: "https://docs.google.com/spreadsheets/d/seed-demo-sheet",
         sheetName: "Ideas",
         columnMapping: { title: "Title", body: "Idea", topic: "Topic", sourceUrl: "URL" },
       },
@@ -235,7 +239,6 @@ async function main() {
       data: {
         sourceId: item.source.id,
         externalId: item.url,
-        sourceType: "LINKEDIN_SAVED_POSTS",
         title: item.title,
         content: item.content,
         url: item.url,
@@ -250,7 +253,7 @@ async function main() {
     const matched = selectRelevantContext(topics, contextCandidates);
     const matchedDocs = contextDocs.filter((d) => matched.some((m) => m.id === d.id));
     const generated = generateIdeaHeuristically(
-      { title: item.title, content: item.content, sourceType: "LINKEDIN_SAVED_POSTS" },
+      { title: item.title, content: item.content, sourceName: item.source.name },
       matchedDocs.map((d) => ({ title: d.title, tags: d.tags }))
     );
 
@@ -285,7 +288,6 @@ async function main() {
       data: {
         sourceId: sheetSource.id,
         externalId: item.url,
-        sourceType: "GOOGLE_SHEET",
         title: item.title,
         content: item.content,
         url: item.url,
@@ -299,7 +301,7 @@ async function main() {
     const matched = selectRelevantContext(topics, contextCandidates);
     const matchedDocs = contextDocs.filter((d) => matched.some((m) => m.id === d.id));
     const generated = generateIdeaHeuristically(
-      { title: item.title, content: item.content, sourceType: "GOOGLE_SHEET" },
+      { title: item.title, content: item.content, sourceName: sheetSource.name },
       matchedDocs.map((d) => ({ title: d.title, tags: d.tags }))
     );
 

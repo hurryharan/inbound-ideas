@@ -1,11 +1,8 @@
-import type { SourceType } from "@prisma/client";
-
-// The common shape every source connector normalizes into (PRD section 14).
-// The idea engine only ever depends on this shape — never on a specific
-// source (LinkedIn, Sheets, Drive, ...).
+// The common shape a Source's sheet rows normalize into (PRD section 14).
+// The idea engine only ever depends on this shape, never on where a
+// particular row originally came from.
 export interface NormalizedItem {
   externalId: string;
-  sourceType: SourceType;
   title: string;
   content: string;
   url?: string;
@@ -14,29 +11,19 @@ export interface NormalizedItem {
   metadata: Record<string, unknown>;
 }
 
+// All optional: unset fields are auto-detected from the sheet's header row.
 export interface ColumnMapping {
-  title: string;
-  body: string;
+  title?: string;
+  body?: string;
   topic?: string;
   status?: string;
   sourceUrl?: string;
+  author?: string;
 }
 
-export interface GoogleSheetSourceConfig {
+export interface SourceConfig {
   spreadsheetId: string;
   spreadsheetUrl?: string;
   sheetName: string;
-  columnMapping: ColumnMapping;
-}
-
-export interface LinkedInSourceConfig {
-  lastImportFilename?: string;
-}
-
-export interface GoogleDriveFolderConfig {
-  folderId: string;
-}
-
-export interface GoogleDriveDocumentConfig {
-  fileId: string;
+  columnMapping?: ColumnMapping;
 }

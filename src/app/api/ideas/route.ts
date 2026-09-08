@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { handleRoute } from "@/lib/api-helpers";
-import type { Prisma, IdeaStatus, SourceType } from "@prisma/client";
+import type { Prisma, IdeaStatus } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   return handleRoute(async () => {
     const url = req.nextUrl;
     const statusParam = url.searchParams.get("status");
-    const sourceType = url.searchParams.get("sourceType") as SourceType | null;
+    const sourceId = url.searchParams.get("sourceId");
     const topic = url.searchParams.get("topic");
     const search = url.searchParams.get("search");
     const sort = url.searchParams.get("sort") ?? "score";
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
       where.status = statuses.length > 1 ? { in: statuses } : statuses[0];
     }
     if (topic) where.topics = { has: topic };
-    if (sourceType) where.sourceItems = { some: { sourceItem: { sourceType } } };
+    if (sourceId) where.sourceItems = { some: { sourceItem: { sourceId } } };
     if (search) {
       where.OR = [
         { title: { contains: search, mode: "insensitive" } },

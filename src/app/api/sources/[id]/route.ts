@@ -4,10 +4,29 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { handleRoute, jsonError } from "@/lib/api-helpers";
 import { extractSpreadsheetId } from "@/lib/sources/google-sheet";
+import type { ColumnMapping, SourceConfig } from "@/lib/sources/types";
+
+const columnMappingSchema = z.object({
+  title: z.string().optional(),
+  body: z.string().optional(),
+  topic: z.string().optional(),
+  status: z.string().optional(),
+  sourceUrl: z.string().optional(),
+  author: z.string().optional(),
+});
 
 const updateSourceSchema = z.object({
   name: z.string().min(1).optional(),
-  config: z.record(z.string(), z.unknown()).optional(),
+  config: z
+    .object({
+      spreadsheetUrl: z.string().min(1).optional(),
+      sheetName: z.string().min(1).optional(),
+      // Partial: only the fields being remapped need to be sent (see
+      // PRD section 12 — "if the sheet changes structure, the user
+      // should be able to remap columns").
+      columnMapping: columnMappingSchema.optional(),
+    })
+    .optional(),
   tags: z.array(z.string()).optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
   refreshFrequencyMinutes: z.number().int().positive().optional(),
@@ -23,14 +42,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const existing = await prisma.source.findFirst({ where: { id, userId } });
     if (!existing) return jsonError("Source not found", 404);
 
-    let config = body.config;
-    if (config && existing.type === "GOOGLE_SHEET" && typeof config.spreadsheetUrl === "string") {
-      config = { ...config, spreadsheetId: extractSpreadsheetId(config.spreadsheetUrl) };
+    let config: SourceConfig | undefined;
+    if (body.config) {
+      const existingConfig = existing.config as unknown as SourceConfig;
+      config = {
+        ...existingConfig,
+        ...(body.config.spreadsheetUrl ? { spreadsheetUrl: body.config.spreadsheetUrl, spreadsheetId: extractSpreadsheetId(body.config.spreadsheetUrl) } : {}),
+        ...(body.config.sheetName ? { sheetName: body.config.sheetName } : {}),
+        ...(body.config.columnMapping
+          ? { columnMapping: { ...existingConfig.columnMapping, ...body.config.columnMapping } as ColumnMapping }
+          : {}),
+      };
     }
+
+    const { config: _bodyConfig, ...rest } = body;
+    void _bodyConfig;
 
     const source = await prisma.source.update({
       where: { id },
-      data: { ...body, config: config as object | undefined },
+      data: { ...rest, ...(config ? { config: config as object } : {}) },
     });
     return NextResponse.json(source);
   });
