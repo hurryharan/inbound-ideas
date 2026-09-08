@@ -94,11 +94,20 @@ hand. Pick one:
 **Option A — Neon (recommended: free, hosted, nothing to install)**
 
 1. [neon.tech](https://neon.tech) → sign up → **New Project**.
-2. Copy the connection string it gives you (looks like
-   `postgresql://user:pass@ep-xxx.neon.tech/dbname?sslmode=require`).
-3. Use that as `DATABASE_URL` in the next step. This works for local dev
-   and, later, for a Vercel deployment — same string, or a second Neon
-   project if you want dev/prod separated.
+2. On the project's **Connect** panel, copy two connection strings:
+   the default one (pooled — hostname has `-pooler` in it) for
+   `DATABASE_URL`, and the same string with **connection pooling toggled
+   off** (hostname without `-pooler`) for `DIRECT_URL`.
+3. Use those as `DATABASE_URL`/`DIRECT_URL` in the next step. This works
+   for local dev and, later, for a Vercel deployment — same strings, or a
+   second Neon project if you want dev/prod separated.
+
+   Both are needed: the app's runtime queries go through the pooled
+   connection (`DATABASE_URL`), but Prisma migrations take a session-level
+   advisory lock that pooled/pgbouncer-style connections don't support
+   reliably — running `prisma migrate deploy` against a pooled URL alone
+   fails with a `pg_advisory_lock` timeout. Migrations use `DIRECT_URL`
+   instead.
 
 **Option B — Docker, on your own machine**
 
@@ -110,6 +119,7 @@ docker run --name inbound-ideas-db \
 ```
 
 `DATABASE_URL="postgresql://postgres:postgres@localhost:5432/inbound_ideas"`.
+No pooler in the picture here, so set `DIRECT_URL` to the same value.
 Requires Docker installed and running; data is lost if you remove the
 container without attaching a volume.
 
@@ -121,7 +131,7 @@ sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
 sudo -u postgres psql -c "CREATE DATABASE inbound_ideas;"
 ```
 
-Same connection string as Option B, pointing at `localhost`.
+Same connection string as Option B (and same note: `DIRECT_URL` = `DATABASE_URL`), pointing at `localhost`.
 
 ### 3. Configure environment variables
 
@@ -131,7 +141,8 @@ cp .env.example .env
 
 At minimum, set:
 
-- `DATABASE_URL` — the connection string from step 2
+- `DATABASE_URL` — the (pooled, if applicable) connection string from step 2
+- `DIRECT_URL` — the direct/non-pooled connection string from step 2 (same as `DATABASE_URL` if your Postgres has no pooler)
 - `APP_PASSWORD` — the password used to sign in
 - `SESSION_SECRET` — any long random string
 - `ENCRYPTION_KEY` — 32 bytes, base64-encoded: `openssl rand -base64 32`
@@ -246,10 +257,12 @@ reason.
    this GitHub repo. Framework preset auto-detects Next.js — leave the
    build/output settings as-is for now (revisited in step 4).
 
-2. **Provision Postgres and get a connection string.** Any standard
+2. **Provision Postgres and get connection strings.** Any standard
    Postgres works — Vercel Postgres (Storage tab → Create Database →
-   Postgres), Neon, or Supabase are the common choices. Copy the pooled
-   connection string it gives you; that's your `DATABASE_URL`.
+   Postgres), Neon, or Supabase are the common choices. Copy **both** the
+   pooled connection string (for `DATABASE_URL`) and the direct/non-pooled
+   one (for `DIRECT_URL`) — on Neon these are the same string with/without
+   `-pooler` in the hostname, on the Connect panel.
 
 3. **Set environment variables.** In the project → **Settings →
    Environment Variables**, add each of these for the **Production**
@@ -260,7 +273,8 @@ reason.
 
    | Variable | Value |
    |---|---|
-   | `DATABASE_URL` | the connection string from step 2 |
+   | `DATABASE_URL` | the pooled connection string from step 2 |
+   | `DIRECT_URL` | the direct/non-pooled connection string from step 2 — required, or `prisma migrate deploy` fails with a `pg_advisory_lock` timeout (pooled connections don't support the session-level lock migrations need) |
    | `APP_PASSWORD` | any password you choose — this is what you'll type on the login screen |
    | `SESSION_SECRET` | a long random string, e.g. output of `openssl rand -hex 32` |
    | `ENCRYPTION_KEY` | 32 random bytes, e.g. output of `openssl rand -base64 32` |

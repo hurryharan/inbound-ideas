@@ -6,8 +6,17 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Migrations need a direct (non-pooled) connection — `migrate deploy`
+  // takes a session-level advisory lock, which doesn't work reliably
+  // through a pooled/pgbouncer-style connection (this is why Neon's
+  // "-pooler" DATABASE_URL alone causes `migrate deploy` to time out
+  // waiting on pg_advisory_lock). Set DIRECT_URL to the same value as
+  // DATABASE_URL for a plain (non-pooled) Postgres instance — it must be
+  // set to *something* whenever migrate commands run, Prisma has no
+  // implicit fallback for an unresolvable directUrl.
+  directUrl = env("DIRECT_URL")
 }
 
 // ─────────────────────────────────────────────────────────────────────────
