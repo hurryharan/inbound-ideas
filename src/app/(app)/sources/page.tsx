@@ -3,6 +3,7 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { fetchJson, postJson } from "@/lib/api-client";
+import { SettingsSubNav } from "@/components/settings-subnav";
 import type { ColumnMapping, Source } from "@/lib/types";
 
 function AddSourceForm({ onCreated }: { onCreated: () => void }) {
@@ -245,6 +246,10 @@ export default function SourcesPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
+      <div className="mb-6">
+        <SettingsSubNav />
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-neutral-900">Sources</h1>

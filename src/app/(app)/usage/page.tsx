@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import { fetchJson } from "@/lib/api-client";
+import { SettingsSubNav } from "@/components/settings-subnav";
 import type { LLMUsageSummary, LLMWorkflow, LLMProviderKind } from "@/lib/types";
 
 const WORKFLOW_LABEL: Record<LLMWorkflow, string> = {
@@ -88,6 +89,10 @@ export default function UsagePage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
+      <div className="mb-6">
+        <SettingsSubNav />
+      </div>
+
       <h1 className="text-xl font-semibold text-neutral-900">Usage &amp; Cost</h1>
       <p className="mt-1 text-sm text-neutral-500">
         What idea generation is actually costing, broken down by workflow and by LLM provider.

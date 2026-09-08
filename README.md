@@ -179,13 +179,13 @@ Sheet inbound sources with live refresh.
 3. Add an authorized redirect URI matching `GOOGLE_REDIRECT_URI` in your
    `.env` (default: `http://localhost:3000/api/context/google/callback`).
 4. Copy the client ID/secret into `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
-5. In the app, go to **Context → Connect Google** and grant read-only
+5. In the app, go to **Settings → Context → Connect Google** and grant read-only
    access. The app requests `drive.readonly` and `spreadsheets.readonly`
    only — it never writes back to your Drive or Sheets.
 
 ## Connecting real sources
 
-- **Any source (LinkedIn, Twitter, anything):** Sources → Add Source →
+- **Any source (LinkedIn, Twitter, anything):** Settings → Sources → Add Source →
   give it a name (e.g. "LinkedIn Saved Posts"), paste a Google Sheet URL,
   and set the sheet name. That's it — column mapping (title/content/URL/
   topic/author) is auto-detected from the sheet's header row on first
@@ -199,7 +199,7 @@ Sheet inbound sources with live refresh.
   hand, via a browser extension, or with an export/automation tool
   (Zapier, IFTTT, Apps Script) — whatever gets rows into the sheet. The
   app only ever reads it.
-- **Context (Google Drive):** Context → Add Source, paste a Drive folder or
+- **Context (Google Drive):** Settings → Context → Add Source, paste a Drive folder or
   document URL, tag it (e.g. `company`, `product`, `governance`), and set a
   priority. The idea engine matches an idea's topics against these tags to
   decide which context to pull into a prompt (see
@@ -330,7 +330,8 @@ recreate the database and re-run migrations.
 ```
 prisma/schema.prisma       Database schema (see PRD section 34 for the entity list)
 prisma/seed.ts             Dev seed dataset
-src/app/(app)/**           Authenticated pages (Inbox, Ideas, Sessions, Sources, Context, LLM, Usage, Settings)
+src/app/(app)/**           Authenticated pages — Inbox, Ideas, Sessions on the main nav;
+                           Sources, Context, LLM, Usage nested under Settings
 src/app/api/**             REST-ish API routes
 src/lib/sources/**         Google Sheets connector (every Source is a sheet), dedup
 src/lib/google/**          Google OAuth + Drive

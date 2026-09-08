@@ -4,9 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-export function NavLink({ href, children }: { href: string; children: ReactNode }) {
+export function NavLink({
+  href,
+  children,
+  activePaths = [],
+}: {
+  href: string;
+  children: ReactNode;
+  /** Extra route prefixes that should also count as "active" for this link. */
+  activePaths?: string[];
+}) {
   const pathname = usePathname();
-  const active = pathname === href || pathname.startsWith(`${href}/`);
+  const isMatch = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
+  const active = isMatch(href) || activePaths.some(isMatch);
 
   return (
     <Link
