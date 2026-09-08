@@ -218,6 +218,26 @@ If no provider is configured, ideas are still generated (using
 `src/lib/ideas/generate.ts`'s heuristic path), and "Explore" falls back to
 the clipboard + a generic provider URL.
 
+## Usage & cost tracking
+
+Every real LLM API call (currently: idea generation during a source
+refresh) is logged as an `LLMUsageEvent` — input/output tokens, which
+provider and model, which workflow triggered it, and a computed cost. The
+**Usage** page shows totals plus a breakdown by workflow and by provider,
+so if a second workflow gets added later (e.g. a future summarization or
+angle-refinement step), it's immediately visible which one is driving
+spend, not just which provider.
+
+Cost is only ever computed from pricing you set yourself — LLM Providers →
+**Edit pricing** (USD per 1M input/output tokens). Anthropic's current
+published rates are suggested automatically when you pick a known Claude
+model; no other provider gets a suggested default, since third-party
+pricing isn't something this codebase tracks reliably over time. A call
+made before pricing was set still records its token counts — it just
+doesn't contribute a dollar figure until you fill one in, and the Usage
+page tells you how many calls are excluded from the cost total for that
+reason.
+
 ## Deployment
 
 ### Option A — Vercel + managed Postgres
@@ -310,12 +330,12 @@ recreate the database and re-run migrations.
 ```
 prisma/schema.prisma       Database schema (see PRD section 34 for the entity list)
 prisma/seed.ts             Dev seed dataset
-src/app/(app)/**           Authenticated pages (Inbox, Ideas, Sessions, Sources, Context, LLM, Settings)
+src/app/(app)/**           Authenticated pages (Inbox, Ideas, Sessions, Sources, Context, LLM, Usage, Settings)
 src/app/api/**             REST-ish API routes
 src/lib/sources/**         Google Sheets connector (every Source is a sheet), dedup
 src/lib/google/**          Google OAuth + Drive
 src/lib/ideas/**           Topic extraction, context matching, scoring, idea generation, prompt building
-src/lib/llm/**             LLM provider adapters + launch/deep-link resolution
+src/lib/llm/**             LLM provider adapters, pricing/cost calc, usage recording, launch/deep-link resolution
 src/components/**          Shared UI (idea card, nav)
 tests/**                   Vitest unit tests
 ```

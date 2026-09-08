@@ -69,11 +69,21 @@ const LLM_SYSTEM_PROMPT = `You extract structured "ideas worth exploring" from a
 
 "angles" must contain 2-4 distinct, non-obvious interpretations — never fewer than 2. Do not pick one for the user. Be specific and avoid generic thought-leadership language.`;
 
+export interface LLMGenerationUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface LLMGenerationResult {
+  fields: GeneratedIdeaFields;
+  usage: LLMGenerationUsage;
+}
+
 export async function generateIdeaWithLLM(
   llm: LLMAdapter,
   item: SourceItemLike,
   matchedContext: ContextDocLike[]
-): Promise<GeneratedIdeaFields> {
+): Promise<LLMGenerationResult> {
   const contextSummary =
     matchedContext.length > 0
       ? matchedContext.map((d) => `- ${d.title} (tags: ${d.tags.join(", ")})`).join("\n")
@@ -88,7 +98,10 @@ ${truncate(item.content, 2000)}
 USER'S RELEVANT CONTEXT DOCUMENTS:
 ${contextSummary}`;
 
-  const raw = await llm.complete({
+  // Let a network/API failure propagate — there's no token usage to report
+  // when the call never completed. A malformed-but-successful response
+  // (caught below) is different: tokens were spent either way.
+  const result = await llm.complete({
     messages: [
       { role: "system", content: LLM_SYSTEM_PROMPT },
       { role: "user", content: userPrompt },
@@ -97,11 +110,11 @@ ${contextSummary}`;
     maxTokens: 1000,
   });
 
-  const parsed = parseIdeaJson(raw);
-  if (!parsed) {
-    return generateIdeaHeuristically(item, matchedContext);
-  }
-  return parsed;
+  const parsed = parseIdeaJson(result.text);
+  return {
+    fields: parsed ?? generateIdeaHeuristically(item, matchedContext),
+    usage: { inputTokens: result.inputTokens, outputTokens: result.outputTokens },
+  };
 }
 
 function parseIdeaJson(raw: string): GeneratedIdeaFields | null {
@@ -126,15 +139,21 @@ function parseIdeaJson(raw: string): GeneratedIdeaFields | null {
   }
 }
 
+export interface GenerateIdeaResult {
+  fields: GeneratedIdeaFields;
+  /** Null when no LLM was configured, or the call itself failed (nothing billed to report). */
+  usage: LLMGenerationUsage | null;
+}
+
 export async function generateIdea(
   item: SourceItemLike,
   matchedContext: ContextDocLike[],
   llm?: LLMAdapter
-): Promise<GeneratedIdeaFields> {
-  if (!llm) return generateIdeaHeuristically(item, matchedContext);
+): Promise<GenerateIdeaResult> {
+  if (!llm) return { fields: generateIdeaHeuristically(item, matchedContext), usage: null };
   try {
     return await generateIdeaWithLLM(llm, item, matchedContext);
   } catch {
-    return generateIdeaHeuristically(item, matchedContext);
+    return { fields: generateIdeaHeuristically(item, matchedContext), usage: null };
   }
 }

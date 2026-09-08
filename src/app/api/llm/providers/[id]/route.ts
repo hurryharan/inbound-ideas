@@ -14,6 +14,8 @@ const updateProviderSchema = z.object({
   maxTokens: z.number().int().positive().optional(),
   systemPrompt: z.string().optional(),
   isDefault: z.boolean().optional(),
+  inputPricePerMillion: z.number().min(0).nullable().optional(),
+  outputPricePerMillion: z.number().min(0).nullable().optional(),
 });
 
 function serialize(provider: { apiKeyEncrypted: string | null; [k: string]: unknown }) {

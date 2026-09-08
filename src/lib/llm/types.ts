@@ -9,6 +9,12 @@ export interface LLMCompletionParams {
   maxTokens?: number;
 }
 
+export interface LLMCompletionResult {
+  text: string;
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface LLMAdapter {
-  complete(params: LLMCompletionParams): Promise<string>;
+  complete(params: LLMCompletionParams): Promise<LLMCompletionResult>;
 }

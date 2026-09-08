@@ -24,6 +24,7 @@ model User {
   llmProviders  LLMProvider[]
   sources       Source[]
   contextSources ContextSource[]
+  llmUsageEvents LLMUsageEvent[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -231,12 +232,51 @@ model LLMProvider {
   maxTokens      Int?            @default(2048)
   systemPrompt   String?
   isDefault      Boolean         @default(false)
+  // USD per 1M tokens, user-supplied (auto-suggested for known Anthropic
+  // models). Null means cost isn't computed for this provider's calls —
+  // usage/tokens are still recorded either way.
+  inputPricePerMillion  Float?
+  outputPricePerMillion Float?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
-  sessions Session[]
+  sessions    Session[]
+  usageEvents LLMUsageEvent[]
 
   @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// LLM usage/cost accounting — one row per completed LLM API call, tagged
+// with which workflow triggered it (today: idea generation) so spend is
+// attributable both by provider and by use case.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum LLMWorkflow {
+  IDEA_GENERATION
+}
+
+model LLMUsageEvent {
+  id            String          @id @default(cuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  llmProviderId String?
+  llmProvider   LLMProvider?    @relation(fields: [llmProviderId], references: [id], onDelete: SetNull)
+  // Denormalized so provider/kind-level rollups survive the provider being edited or deleted.
+  providerKind  LLMProviderKind
+  providerName  String
+  model         String
+  workflow      LLMWorkflow
+  inputTokens   Int
+  outputTokens  Int
+  // Null when the provider had no pricing configured at call time.
+  costUsd       Float?
+  createdAt     DateTime        @default(now())
+
+  @@index([userId])
+  @@index([workflow])
+  @@index([llmProviderId])
+  @@index([createdAt])
 }
 
 enum SessionStatus {

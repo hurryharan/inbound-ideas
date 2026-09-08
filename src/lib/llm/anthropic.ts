@@ -1,4 +1,4 @@
-import type { ChatMessage, LLMAdapter, LLMCompletionParams } from "./types";
+import type { ChatMessage, LLMAdapter, LLMCompletionParams, LLMCompletionResult } from "./types";
 
 export class AnthropicAdapter implements LLMAdapter {
   constructor(
@@ -7,7 +7,7 @@ export class AnthropicAdapter implements LLMAdapter {
     private baseUrl: string = "https://api.anthropic.com/v1"
   ) {}
 
-  async complete({ messages, temperature, maxTokens }: LLMCompletionParams): Promise<string> {
+  async complete({ messages, temperature, maxTokens }: LLMCompletionParams): Promise<LLMCompletionResult> {
     const system = messages.find((m: ChatMessage) => m.role === "system")?.content;
     const conversation = messages.filter((m: ChatMessage) => m.role !== "system");
 
@@ -32,6 +32,10 @@ export class AnthropicAdapter implements LLMAdapter {
     }
 
     const data = await res.json();
-    return data.content?.[0]?.text ?? "";
+    return {
+      text: data.content?.[0]?.text ?? "",
+      inputTokens: data.usage?.input_tokens ?? 0,
+      outputTokens: data.usage?.output_tokens ?? 0,
+    };
   }
 }
