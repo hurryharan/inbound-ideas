@@ -244,7 +244,6 @@ the clipboard + a generic provider URL.
    | `APP_PASSWORD` | any password you choose — this is what you'll type on the login screen |
    | `SESSION_SECRET` | a long random string, e.g. output of `openssl rand -hex 32` |
    | `ENCRYPTION_KEY` | 32 random bytes, e.g. output of `openssl rand -base64 32` |
-   | `NEXT_PUBLIC_APP_URL` | your production URL, e.g. `https://your-app.vercel.app` |
    | `GOOGLE_REDIRECT_URI` | `https://your-app.vercel.app/api/context/google/callback` (only if using Google) |
    | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | from Google Cloud Console (optional, can add later) |
    | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_AI_API_KEY` | optional — LLM providers can also be added later from the app's Settings UI |
