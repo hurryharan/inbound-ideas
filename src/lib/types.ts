@@ -7,10 +7,18 @@ export interface Angle {
 
 export type IdeaStatus = "NEW" | "SURFACED" | "EXPLORING" | "EXPLORED" | "PARKED" | "ARCHIVED";
 export type SourcePriority = "LOW" | "MEDIUM" | "HIGH";
-export type SourceType = "LINKEDIN_SAVED_POSTS" | "GOOGLE_SHEET" | "GOOGLE_DRIVE_DOCUMENT" | "GOOGLE_DRIVE_FOLDER";
 export type ContextSourceType = "GOOGLE_DRIVE_DOCUMENT" | "GOOGLE_DRIVE_FOLDER" | "GOOGLE_SHEET";
 export type LLMProviderKind = "OPENAI" | "ANTHROPIC" | "GOOGLE" | "OPENAI_COMPATIBLE";
 export type SessionStatus = "STARTED" | "IN_PROGRESS" | "COMPLETED" | "ABANDONED";
+
+export interface ColumnMapping {
+  title?: string;
+  body?: string;
+  topic?: string;
+  status?: string;
+  sourceUrl?: string;
+  author?: string;
+}
 
 export interface SourceItemRef {
   id: string;
@@ -18,9 +26,8 @@ export interface SourceItemRef {
   content: string;
   url: string | null;
   author: string | null;
-  sourceType: SourceType;
   createdAt: string;
-  source: { id: string; name: string; type: SourceType };
+  source: { id: string; name: string };
 }
 
 export interface ContextDocumentRef {
@@ -49,12 +56,18 @@ export interface Idea {
   contextDocuments: { contextDocument: ContextDocumentRef; relevance: number }[];
 }
 
+export interface SourceConfig {
+  spreadsheetId: string;
+  spreadsheetUrl?: string;
+  sheetName: string;
+  columnMapping?: ColumnMapping;
+}
+
 export interface Source {
   id: string;
-  type: SourceType;
   name: string;
   enabled: boolean;
-  config: Record<string, unknown>;
+  config: SourceConfig;
   tags: string[];
   priority: SourcePriority;
   refreshFrequencyMinutes: number;

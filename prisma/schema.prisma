@@ -27,15 +27,12 @@ model User {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Sources (section 14, 24) — abstraction over inbound material producers
+// Sources (section 14, 24) — abstraction over inbound material producers.
+// Every Source is a Google Sheet: the user (or a periodic export from
+// LinkedIn/Twitter/wherever) populates rows into a sheet, and this app
+// reads it read-only. The Source's `name` is what distinguishes "LinkedIn
+// Saved Posts" from "Content Ideas" — there is no separate connector type.
 // ─────────────────────────────────────────────────────────────────────────
-
-enum SourceType {
-  LINKEDIN_SAVED_POSTS
-  GOOGLE_SHEET
-  GOOGLE_DRIVE_DOCUMENT
-  GOOGLE_DRIVE_FOLDER
-}
 
 enum SourcePriority {
   LOW
@@ -47,10 +44,10 @@ model Source {
   id               String         @id @default(cuid())
   userId           String
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type             SourceType
   name             String
   enabled          Boolean        @default(true)
-  // Free-form connector configuration (spreadsheet id, folder id, column mapping, etc).
+  // { spreadsheetId, spreadsheetUrl, sheetName, columnMapping? } — columnMapping
+  // is auto-detected from the header row on first refresh if omitted.
   config           Json           @default("{}")
   tags             String[]       @default([])
   priority         SourcePriority @default(MEDIUM)
@@ -69,7 +66,6 @@ model SourceItem {
   sourceId    String
   source      Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   externalId  String // stable id/url from the origin system, used for de-dup
-  sourceType  SourceType
   title       String
   content     String
   url         String?

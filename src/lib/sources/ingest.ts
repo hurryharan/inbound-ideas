@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import type { NormalizedItem } from "./types";
+import type { NormalizedItem, SourceConfig } from "./types";
 import { contentHash, dedupeBatch, type ExistingKeys } from "./dedup";
-import { fetchNormalizedItems } from "./registry";
+import { fetchGoogleSheetItems } from "./google-sheet";
 import { generateIdeasForItems } from "@/lib/ideas/pipeline";
-import type { Source } from "@prisma/client";
+import type { Prisma, Source } from "@prisma/client";
 
 /**
  * Persists normalized+deduped items for a source and triggers idea
@@ -44,7 +44,6 @@ export async function ingestNormalizedItems(
         data: {
           sourceId: source.id,
           externalId: item.externalId,
-          sourceType: item.sourceType,
           title: item.title,
           content: item.content,
           url: item.url,
@@ -67,7 +66,25 @@ export async function ingestNormalizedItems(
   return { createdCount: created.length, ideaCount };
 }
 
-export async function refreshSource(userId: string, source: Source): Promise<{ createdCount: number; ideaCount: number }> {
-  const rawItems = await fetchNormalizedItems(userId, source);
-  return ingestNormalizedItems(userId, source, rawItems);
+/**
+ * Fetches a source's sheet, persists any newly-detected column mapping back
+ * onto the source (so it's visible/editable in Settings), and ingests the
+ * result.
+ */
+export async function refreshSource(
+  userId: string,
+  source: Source
+): Promise<{ createdCount: number; ideaCount: number }> {
+  const config = source.config as unknown as SourceConfig;
+  const { items, resolvedMapping } = await fetchGoogleSheetItems(userId, config);
+
+  if (JSON.stringify(resolvedMapping) !== JSON.stringify(config.columnMapping ?? {})) {
+    const updatedConfig: SourceConfig = { ...config, columnMapping: resolvedMapping };
+    await prisma.source.update({
+      where: { id: source.id },
+      data: { config: updatedConfig as unknown as Prisma.InputJsonValue },
+    });
+  }
+
+  return ingestNormalizedItems(userId, source, items);
 }

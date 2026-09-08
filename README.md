@@ -34,7 +34,7 @@ Frontend (Next.js pages, client components + SWR)
    ▼
 API routes (src/app/api/**)
    │
-   ├── Source connectors     src/lib/sources/*      (LinkedIn CSV/JSON import, Google Sheets)
+   ├── Source connector      src/lib/sources/*      (Google Sheets — every Source is a sheet)
    ├── Context retrieval     src/lib/ideas/context-matching.ts, src/lib/context/*
    ├── Idea engine           src/lib/ideas/*         (topics, angles, scoring, generation, prompt)
    ├── LLM adapters          src/lib/llm/*           (OpenAI / Anthropic / Google / compatible)
@@ -44,10 +44,15 @@ API routes (src/app/api/**)
 
 Key design decisions, matching the product spec:
 
-- **Source abstraction.** Every connector normalizes into the same
-  `NormalizedItem` shape (`src/lib/sources/types.ts`). The idea engine never
-  depends on LinkedIn or Sheets specifically — a future connector (RSS,
-  Twitter/X, a browser extension) only needs to produce that shape.
+- **One connector, not one per platform.** Every Source is a Google Sheet
+  (`src/lib/sources/google-sheet.ts`) — LinkedIn, Twitter, or anything else
+  becomes a source by periodically exporting into a sheet, rather than the
+  app maintaining a bespoke connector per platform. Rows normalize into a
+  shared `NormalizedItem` shape (`src/lib/sources/types.ts`), and column
+  mapping is auto-detected from the header row (title/content/URL/topic/
+  author, matched against common aliases) so adding a source is just a
+  name + spreadsheet URL — no per-column setup unless detection gets it
+  wrong, in which case it's editable per PRD section 12.
 - **LLM provider abstraction.** `src/lib/llm/index.ts` builds an `LLMAdapter`
   from a stored `LLMProvider` row; nothing else in the app knows which
   provider is configured. If no provider is configured at all, idea
@@ -180,18 +185,20 @@ Sheet inbound sources with live refresh.
 
 ## Connecting real sources
 
-- **LinkedIn Saved Posts:** Sources → Add Source → LinkedIn Saved Posts,
-  then use **Import CSV/JSON** on that source. LinkedIn has no public API
-  for saved posts, so export/copy your saved posts into a CSV with columns
-  like `title, text/content, url, author, date` (headers are matched
-  case-insensitively; extra columns are ignored) or an equivalent JSON
-  array. A browser extension or an official API integration can replace
-  this later without touching anything downstream — see
-  `src/lib/sources/linkedin.ts`.
-- **Google Sheet:** Sources → Add Source → Google Sheet, paste the sheet
-  URL, and map your columns (title/body/topic/URL) to your sheet's actual
-  headers. If the sheet's structure changes, edit the source and remap —
-  no code change needed.
+- **Any source (LinkedIn, Twitter, anything):** Sources → Add Source →
+  give it a name (e.g. "LinkedIn Saved Posts"), paste a Google Sheet URL,
+  and set the sheet name. That's it — column mapping (title/content/URL/
+  topic/author) is auto-detected from the sheet's header row on first
+  refresh against common aliases (`Title`/`Text`/`Content`, `URL`/`Link`,
+  etc. — see `COLUMN_ALIASES` in `src/lib/sources/google-sheet.ts`). If
+  detection picks the wrong column, or your sheet uses unusual headers,
+  hit **Edit mapping** on that source and set it explicitly — no code
+  change needed, per PRD section 12.
+
+  Since LinkedIn has no public API for saved posts, populate the sheet by
+  hand, via a browser extension, or with an export/automation tool
+  (Zapier, IFTTT, Apps Script) — whatever gets rows into the sheet. The
+  app only ever reads it.
 - **Context (Google Drive):** Context → Add Source, paste a Drive folder or
   document URL, tag it (e.g. `company`, `product`, `governance`), and set a
   priority. The idea engine matches an idea's topics against these tags to
@@ -306,7 +313,7 @@ prisma/schema.prisma       Database schema (see PRD section 34 for the entity li
 prisma/seed.ts             Dev seed dataset
 src/app/(app)/**           Authenticated pages (Inbox, Ideas, Sessions, Sources, Context, LLM, Settings)
 src/app/api/**             REST-ish API routes
-src/lib/sources/**         Source connector framework + LinkedIn/Sheets connectors
+src/lib/sources/**         Google Sheets connector (every Source is a sheet), dedup
 src/lib/google/**          Google OAuth + Drive
 src/lib/ideas/**           Topic extraction, context matching, scoring, idea generation, prompt building
 src/lib/llm/**             LLM provider adapters + launch/deep-link resolution

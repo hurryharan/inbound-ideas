@@ -20,9 +20,7 @@ export default function InboxPage() {
     if (!sources || sources.length === 0) return;
     setRefreshing(true);
     try {
-      await Promise.allSettled(
-        sources.filter((s) => s.enabled && s.type !== "LINKEDIN_SAVED_POSTS").map((s) => postJson(`/api/sources/${s.id}/refresh`, {}))
-      );
+      await Promise.allSettled(sources.filter((s) => s.enabled).map((s) => postJson(`/api/sources/${s.id}/refresh`, {})));
       await mutate();
     } finally {
       setRefreshing(false);

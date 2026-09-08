@@ -56,7 +56,7 @@ export async function generateIdeasForItems(
     const matchedDocs = contextDocs.filter((d) => matched.some((m) => m.id === d.id));
 
     const generated = await generateIdea(
-      { title: item.title, content: item.content, sourceType: item.sourceType },
+      { title: item.title, content: item.content, sourceName: item.source.name },
       matchedDocs.map((d) => ({ title: d.title, tags: d.tags })),
       llm
     );
