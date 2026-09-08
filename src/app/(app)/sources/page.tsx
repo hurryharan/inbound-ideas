@@ -112,22 +112,70 @@ const MAPPING_FIELDS: { key: keyof ColumnMapping; label: string }[] = [
   { key: "author", label: "Author column" },
 ];
 
-function EditMappingForm({ source, onSaved, onCancel }: { source: Source; onSaved: () => void; onCancel: () => void }) {
+function EditSourceForm({ source, onSaved, onCancel }: { source: Source; onSaved: () => void; onCancel: () => void }) {
+  const [name, setName] = useState(source.name);
+  const [spreadsheetUrl, setSpreadsheetUrl] = useState(source.config.spreadsheetUrl ?? "");
+  const [sheetName, setSheetName] = useState(source.config.sheetName ?? "");
+  const [tags, setTags] = useState(source.tags.join(", "));
+  const [priority, setPriority] = useState(source.priority);
   const [mapping, setMapping] = useState<ColumnMapping>(source.config.columnMapping ?? {});
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function save() {
     setSaving(true);
+    setError(null);
     try {
-      await postJson(`/api/sources/${source.id}`, { config: { columnMapping: mapping } }, "PATCH");
+      await postJson(
+        `/api/sources/${source.id}`,
+        {
+          name,
+          config: { spreadsheetUrl, sheetName, columnMapping: mapping },
+          tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+          priority,
+        },
+        "PATCH"
+      );
       onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="mt-3 space-y-2 rounded-md bg-neutral-50 p-3">
+    <div className="mt-3 space-y-3 rounded-md bg-neutral-50 p-3">
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-xs text-neutral-500">
+          Name
+          <input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+        </label>
+        <label className="text-xs text-neutral-500">
+          Sheet name
+          <input value={sheetName} onChange={(e) => setSheetName(e.target.value)} className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+        </label>
+      </div>
+      <label className="block text-xs text-neutral-500">
+        Spreadsheet URL
+        <input value={spreadsheetUrl} onChange={(e) => setSpreadsheetUrl(e.target.value)} className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      </label>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-xs text-neutral-500">
+          Tags (comma separated)
+          <input value={tags} onChange={(e) => setTags(e.target.value)} className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+        </label>
+        <label className="text-xs text-neutral-500">
+          Priority
+          <select value={priority} onChange={(e) => setPriority(e.target.value as Source["priority"])} className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm">
+            <option value="LOW">Low</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="HIGH">High</option>
+          </select>
+        </label>
+      </div>
+
+      <p className="text-xs font-medium text-neutral-500">Column mapping (leave blank to auto-detect)</p>
       <div className="grid grid-cols-2 gap-2">
         {MAPPING_FIELDS.map(({ key, label }) => (
           <label key={key} className="text-xs text-neutral-500">
@@ -141,13 +189,16 @@ function EditMappingForm({ source, onSaved, onCancel }: { source: Source; onSave
           </label>
         ))}
       </div>
+
+      {error && <p className="text-xs text-red-600">{error}</p>}
+
       <div className="flex gap-2">
         <button
           onClick={save}
           disabled={saving}
           className="rounded-md bg-neutral-900 px-3 py-1 text-xs font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
         >
-          {saving ? "Saving…" : "Save mapping"}
+          {saving ? "Saving…" : "Save changes"}
         </button>
         <button onClick={onCancel} className="rounded-md border border-neutral-300 px-3 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100">
           Cancel
@@ -160,7 +211,7 @@ function EditMappingForm({ source, onSaved, onCancel }: { source: Source; onSave
 function SourceRow({ source, onChange }: { source: Source; onChange: () => void }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [editingMapping, setEditingMapping] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   async function refresh() {
     setBusy(true);
@@ -207,7 +258,7 @@ function SourceRow({ source, onChange }: { source: Source; onChange: () => void 
         </span>
       </div>
 
-      {mappingSummary && !editingMapping && <p className="mt-2 text-xs text-neutral-400">Detected columns: {mappingSummary}</p>}
+      {mappingSummary && !editing && <p className="mt-2 text-xs text-neutral-400">Detected columns: {mappingSummary}</p>}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
@@ -218,10 +269,10 @@ function SourceRow({ source, onChange }: { source: Source; onChange: () => void 
           {busy ? "Working…" : "Refresh"}
         </button>
         <button
-          onClick={() => setEditingMapping((v) => !v)}
+          onClick={() => setEditing((v) => !v)}
           className="rounded-md border border-neutral-300 px-3 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
         >
-          {editingMapping ? "Hide mapping" : "Edit mapping"}
+          {editing ? "Cancel edit" : "Edit"}
         </button>
         <button onClick={toggleEnabled} className="rounded-md border border-neutral-300 px-3 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100">
           {source.enabled ? "Disable" : "Enable"}
@@ -231,8 +282,8 @@ function SourceRow({ source, onChange }: { source: Source; onChange: () => void 
         </button>
       </div>
 
-      {editingMapping && (
-        <EditMappingForm source={source} onSaved={() => { setEditingMapping(false); onChange(); }} onCancel={() => setEditingMapping(false)} />
+      {editing && (
+        <EditSourceForm source={source} onSaved={() => { setEditing(false); onChange(); }} onCancel={() => setEditing(false)} />
       )}
 
       {message && <p className="mt-2 text-xs text-neutral-500">{message}</p>}

@@ -3,10 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { handleRoute, jsonError } from "@/lib/api-helpers";
+import { extractDriveFileId } from "@/lib/google/drive";
 
 const updateContextSourceSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
+  url: z.string().min(1).optional(),
   tags: z.array(z.string()).optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH"]).optional(),
   instructions: z.string().optional(),
@@ -20,8 +22,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const existing = await prisma.contextSource.findFirst({ where: { id, userId } });
     if (!existing) return jsonError("Context source not found", 404);
 
-    const body = updateContextSourceSchema.parse(await req.json());
-    const source = await prisma.contextSource.update({ where: { id }, data: body });
+    const { url, ...body } = updateContextSourceSchema.parse(await req.json());
+
+    const source = await prisma.contextSource.update({
+      where: { id },
+      data: { ...body, ...(url ? { url, externalId: extractDriveFileId(url) } : {}) },
+    });
     return NextResponse.json(source);
   });
 }
