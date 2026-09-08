@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: "/sources", label: "Sources" },
   { href: "/context", label: "Context" },
   { href: "/llm", label: "LLM" },
+  { href: "/usage", label: "Usage" },
   { href: "/settings", label: "Settings" },
 ];
 

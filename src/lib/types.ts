@@ -103,6 +103,37 @@ export interface LLMProvider {
   systemPrompt: string | null;
   isDefault: boolean;
   hasApiKey: boolean;
+  inputPricePerMillion: number | null;
+  outputPricePerMillion: number | null;
+}
+
+export type LLMWorkflow = "IDEA_GENERATION";
+
+export interface LLMUsageBreakdown {
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number | null;
+}
+
+export interface LLMUsageEvent {
+  id: string;
+  llmProviderId: string | null;
+  providerKind: LLMProviderKind;
+  providerName: string;
+  model: string;
+  workflow: LLMWorkflow;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number | null;
+  createdAt: string;
+}
+
+export interface LLMUsageSummary {
+  totals: LLMUsageBreakdown & { unpricedCalls: number };
+  byWorkflow: (LLMUsageBreakdown & { workflow: LLMWorkflow })[];
+  byProvider: (LLMUsageBreakdown & { llmProviderId: string | null; providerName: string; providerKind: LLMProviderKind })[];
+  recentEvents: LLMUsageEvent[];
 }
 
 export interface Session {

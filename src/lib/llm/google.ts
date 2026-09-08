@@ -1,4 +1,4 @@
-import type { ChatMessage, LLMAdapter, LLMCompletionParams } from "./types";
+import type { ChatMessage, LLMAdapter, LLMCompletionParams, LLMCompletionResult } from "./types";
 
 export class GoogleAdapter implements LLMAdapter {
   constructor(
@@ -7,7 +7,7 @@ export class GoogleAdapter implements LLMAdapter {
     private baseUrl: string = "https://generativelanguage.googleapis.com/v1beta"
   ) {}
 
-  async complete({ messages, temperature, maxTokens }: LLMCompletionParams): Promise<string> {
+  async complete({ messages, temperature, maxTokens }: LLMCompletionParams): Promise<LLMCompletionResult> {
     const system = messages.find((m: ChatMessage) => m.role === "system")?.content;
     const conversation = messages.filter((m: ChatMessage) => m.role !== "system");
 
@@ -32,6 +32,10 @@ export class GoogleAdapter implements LLMAdapter {
     }
 
     const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "";
+    return {
+      text: data.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "",
+      inputTokens: data.usageMetadata?.promptTokenCount ?? 0,
+      outputTokens: data.usageMetadata?.candidatesTokenCount ?? 0,
+    };
   }
 }

@@ -1,22 +1,25 @@
 import { prisma } from "@/lib/prisma";
 import { getAdapterForProvider } from "@/lib/llm";
 import type { LLMAdapter } from "@/lib/llm/types";
+import { recordLLMUsage } from "@/lib/llm/usage";
 import { getRankingWeights } from "@/lib/preferences";
 import { extractTopics } from "./topics";
 import { selectRelevantContext } from "./context-matching";
 import { computeScore, estimateFactors } from "./scoring";
 import { generateIdea } from "./generate";
-import type { Prisma, Source, SourceItem, SourcePriority } from "@prisma/client";
+import type { LLMProvider, Prisma, Source, SourceItem, SourcePriority } from "@prisma/client";
 
 const SOURCE_PRIORITY_WEIGHT: Record<SourcePriority, number> = { LOW: 0.4, MEDIUM: 0.7, HIGH: 1.0 };
 
-async function getDefaultLLMAdapter(userId: string): Promise<LLMAdapter | undefined> {
+async function getDefaultLLMProvider(
+  userId: string
+): Promise<{ provider: LLMProvider | null; adapter: LLMAdapter | undefined }> {
   const provider = await prisma.lLMProvider.findFirst({ where: { userId, isDefault: true } });
-  if (!provider) return undefined;
+  if (!provider) return { provider: null, adapter: undefined };
   try {
-    return getAdapterForProvider(provider);
+    return { provider, adapter: getAdapterForProvider(provider) };
   } catch {
-    return undefined;
+    return { provider: null, adapter: undefined };
   }
 }
 
@@ -33,13 +36,13 @@ export async function generateIdeasForItems(
 ): Promise<number> {
   if (items.length === 0) return 0;
 
-  const [contextDocs, weights, llm] = await Promise.all([
+  const [contextDocs, weights, { provider, adapter: llm }] = await Promise.all([
     prisma.contextDocument.findMany({
       where: { contextSource: { userId, enabled: true } },
       include: { contextSource: { select: { priority: true } } },
     }),
     getRankingWeights(userId),
-    getDefaultLLMAdapter(userId),
+    getDefaultLLMProvider(userId),
   ]);
 
   const contextCandidates = contextDocs.map((doc) => ({
@@ -55,7 +58,7 @@ export async function generateIdeasForItems(
     const matched = selectRelevantContext(topics, contextCandidates);
     const matchedDocs = contextDocs.filter((d) => matched.some((m) => m.id === d.id));
 
-    const generated = await generateIdea(
+    const { fields: generated, usage } = await generateIdea(
       { title: item.title, content: item.content, sourceName: item.source.name },
       matchedDocs.map((d) => ({ title: d.title, tags: d.tags })),
       llm
@@ -87,6 +90,10 @@ export async function generateIdeasForItems(
       },
     });
     created++;
+
+    if (usage && provider) {
+      await recordLLMUsage({ userId, provider, workflow: "IDEA_GENERATION", usage });
+    }
   }
 
   return created;

@@ -6,6 +6,7 @@ import { generateIdeaHeuristically } from "../src/lib/ideas/generate";
 import { computeScore, estimateFactors, DEFAULT_RANKING_WEIGHTS } from "../src/lib/ideas/scoring";
 import { buildIdeationPrompt } from "../src/lib/ideas/prompt";
 import { DEFAULT_IDEATION_PROMPT } from "../src/lib/ideas/prompt";
+import { computeCostUsd } from "../src/lib/llm/pricing";
 
 const prisma = new PrismaClient();
 
@@ -374,7 +375,48 @@ async function main() {
     });
   }
 
-  console.log(`Seed complete: 3 context sources, 3 context documents, 2 sources, ${ideaCount} ideas, ${exploredIdeas.length} sessions.`);
+  // ── LLM usage/cost demo data ─────────────────────────────────────────
+  const anthropicProvider = await prisma.lLMProvider.create({
+    data: {
+      userId: user.id,
+      kind: "ANTHROPIC",
+      name: "Claude",
+      defaultModel: "claude-sonnet-5",
+      isDefault: true,
+      inputPricePerMillion: 2,
+      outputPricePerMillion: 10,
+    },
+  });
+
+  const usageSamples = [
+    { inputTokens: 1450, outputTokens: 320 },
+    { inputTokens: 1620, outputTokens: 410 },
+    { inputTokens: 1380, outputTokens: 295 },
+    { inputTokens: 1710, outputTokens: 380 },
+    { inputTokens: 1290, outputTokens: 260 },
+  ];
+
+  for (let i = 0; i < usageSamples.length; i++) {
+    const { inputTokens, outputTokens } = usageSamples[i];
+    await prisma.lLMUsageEvent.create({
+      data: {
+        userId: user.id,
+        llmProviderId: anthropicProvider.id,
+        providerKind: anthropicProvider.kind,
+        providerName: anthropicProvider.name,
+        model: anthropicProvider.defaultModel,
+        workflow: "IDEA_GENERATION",
+        inputTokens,
+        outputTokens,
+        costUsd: computeCostUsd(anthropicProvider, inputTokens, outputTokens),
+        createdAt: new Date(Date.now() - (usageSamples.length - i) * 1000 * 60 * 60 * 6),
+      },
+    });
+  }
+
+  console.log(
+    `Seed complete: 3 context sources, 3 context documents, 2 sources, ${ideaCount} ideas, ${exploredIdeas.length} sessions, ${usageSamples.length} LLM usage events.`
+  );
 }
 
 main()

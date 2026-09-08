@@ -1,4 +1,4 @@
-import type { ChatMessage, LLMAdapter, LLMCompletionParams } from "./types";
+import type { ChatMessage, LLMAdapter, LLMCompletionParams, LLMCompletionResult } from "./types";
 
 export class OpenAIAdapter implements LLMAdapter {
   constructor(
@@ -7,7 +7,7 @@ export class OpenAIAdapter implements LLMAdapter {
     private baseUrl: string = "https://api.openai.com/v1"
   ) {}
 
-  async complete({ messages, temperature, maxTokens }: LLMCompletionParams): Promise<string> {
+  async complete({ messages, temperature, maxTokens }: LLMCompletionParams): Promise<LLMCompletionResult> {
     const res = await fetch(`${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
@@ -27,6 +27,10 @@ export class OpenAIAdapter implements LLMAdapter {
     }
 
     const data = await res.json();
-    return data.choices?.[0]?.message?.content ?? "";
+    return {
+      text: data.choices?.[0]?.message?.content ?? "",
+      inputTokens: data.usage?.prompt_tokens ?? 0,
+      outputTokens: data.usage?.completion_tokens ?? 0,
+    };
   }
 }

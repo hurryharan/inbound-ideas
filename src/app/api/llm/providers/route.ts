@@ -15,6 +15,8 @@ const createProviderSchema = z.object({
   maxTokens: z.number().int().positive().optional(),
   systemPrompt: z.string().optional(),
   isDefault: z.boolean().default(false),
+  inputPricePerMillion: z.number().min(0).optional(),
+  outputPricePerMillion: z.number().min(0).optional(),
 });
 
 function serialize(provider: { apiKeyEncrypted: string | null; [k: string]: unknown }) {
@@ -52,6 +54,8 @@ export async function POST(req: NextRequest) {
         maxTokens: body.maxTokens,
         systemPrompt: body.systemPrompt,
         isDefault: body.isDefault,
+        inputPricePerMillion: body.inputPricePerMillion,
+        outputPricePerMillion: body.outputPricePerMillion,
       },
     });
 
