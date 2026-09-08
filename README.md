@@ -80,7 +80,45 @@ npm install
 > 'edgesOut')`, that's a known npm/arborist bug unrelated to this project —
 > retry with `npm install --legacy-peer-deps`.
 
-### 2. Configure environment variables
+### 2. Set up Postgres
+
+All this needs is a running Postgres server and a connection string — the
+app creates its own schema via Prisma migrations, nothing to configure by
+hand. Pick one:
+
+**Option A — Neon (recommended: free, hosted, nothing to install)**
+
+1. [neon.tech](https://neon.tech) → sign up → **New Project**.
+2. Copy the connection string it gives you (looks like
+   `postgresql://user:pass@ep-xxx.neon.tech/dbname?sslmode=require`).
+3. Use that as `DATABASE_URL` in the next step. This works for local dev
+   and, later, for a Vercel deployment — same string, or a second Neon
+   project if you want dev/prod separated.
+
+**Option B — Docker, on your own machine**
+
+```bash
+docker run --name inbound-ideas-db \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=inbound_ideas \
+  -p 5432:5432 -d postgres:16
+```
+
+`DATABASE_URL="postgresql://postgres:postgres@localhost:5432/inbound_ideas"`.
+Requires Docker installed and running; data is lost if you remove the
+container without attaching a volume.
+
+**Option C — Native install, no Docker (Debian/Ubuntu)**
+
+```bash
+sudo apt-get install -y postgresql
+sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+sudo -u postgres psql -c "CREATE DATABASE inbound_ideas;"
+```
+
+Same connection string as Option B, pointing at `localhost`.
+
+### 3. Configure environment variables
 
 ```bash
 cp .env.example .env
@@ -88,7 +126,7 @@ cp .env.example .env
 
 At minimum, set:
 
-- `DATABASE_URL` — your Postgres connection string
+- `DATABASE_URL` — the connection string from step 2
 - `APP_PASSWORD` — the password used to sign in
 - `SESSION_SECRET` — any long random string
 - `ENCRYPTION_KEY` — 32 bytes, base64-encoded: `openssl rand -base64 32`
@@ -97,7 +135,7 @@ Google OAuth and LLM provider keys can be added later from the app's
 Settings UI, or set here to have them ready at first run. See
 [Google OAuth setup](#google-oauth-setup) below.
 
-### 3. Set up the database
+### 4. Apply the schema
 
 ```bash
 npx prisma migrate deploy   # applies committed migrations
@@ -107,7 +145,7 @@ npm run db:seed             # optional: loads a demo dataset (12 ideas, context,
 For schema changes during development, use `npx prisma migrate dev` instead
 of `deploy`.
 
-### 4. Run it
+### 5. Run it
 
 ```bash
 npm run dev
@@ -116,7 +154,7 @@ npm run dev
 Visit `http://localhost:3000`, sign in with `APP_PASSWORD`, and you'll land
 on the Inbox — populated with the seed dataset if you ran `db:seed`.
 
-### 5. Run tests
+### 6. Run tests
 
 ```bash
 npm test
