@@ -121,7 +121,9 @@ export async function fetchGoogleSheetItems(userId: string, config: SourceConfig
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: config.spreadsheetId,
-    range: quoteSheetRange(config.sheetName),
+    // A bare quoted sheet name (no cell range) still trips "Unable to parse
+    // range" for some sheet names — appending an explicit column range avoids it.
+    range: `${quoteSheetRange(config.sheetName)}!A:ZZ`,
   });
 
   const values = (res.data.values ?? []) as string[][];
