@@ -105,13 +105,23 @@ export interface FetchedSheetItems {
   resolvedMapping: ColumnMapping;
 }
 
+/**
+ * Wraps a sheet name for use as an A1-notation range. The Sheets API's range
+ * parser rejects unquoted names containing characters like hyphens, spaces,
+ * or a leading digit (e.g. "linkedin-post-triage-2026-09-05" fails with
+ * "Unable to parse range") — quoting is always valid, so always quote.
+ */
+export function quoteSheetRange(sheetName: string): string {
+  return `'${sheetName.replace(/'/g, "''")}'`;
+}
+
 export async function fetchGoogleSheetItems(userId: string, config: SourceConfig): Promise<FetchedSheetItems> {
   const auth = await getGoogleAuthClient(userId);
   const sheets = google.sheets({ version: "v4", auth });
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: config.spreadsheetId,
-    range: config.sheetName,
+    range: quoteSheetRange(config.sheetName),
   });
 
   const values = (res.data.values ?? []) as string[][];
