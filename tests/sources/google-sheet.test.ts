@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { autoDetectColumnMapping, mapSheetRowsToItems, resolveColumnMapping } from "@/lib/sources/google-sheet";
+import { autoDetectColumnMapping, mapSheetRowsToItems, quoteSheetRange, resolveColumnMapping } from "@/lib/sources/google-sheet";
+
+describe("quoteSheetRange", () => {
+  it("quotes sheet names containing hyphens, which the Sheets API otherwise rejects with 'Unable to parse range'", () => {
+    expect(quoteSheetRange("linkedin-post-triage-2026-09-05")).toBe("'linkedin-post-triage-2026-09-05'");
+  });
+
+  it("quotes simple names too — quoting is always valid A1 notation", () => {
+    expect(quoteSheetRange("Sheet1")).toBe("'Sheet1'");
+    expect(quoteSheetRange("Saved Posts")).toBe("'Saved Posts'");
+  });
+
+  it("escapes embedded single quotes by doubling them", () => {
+    expect(quoteSheetRange("Q1's Ideas")).toBe("'Q1''s Ideas'");
+  });
+});
 
 describe("autoDetectColumnMapping (every Source is a sheet — this is what makes 'just paste a URL' work)", () => {
   it("detects the app's own default header names", () => {
