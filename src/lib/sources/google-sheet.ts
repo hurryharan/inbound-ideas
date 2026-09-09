@@ -119,14 +119,34 @@ export async function fetchGoogleSheetItems(userId: string, config: SourceConfig
   const auth = await getGoogleAuthClient(userId);
   const sheets = google.sheets({ version: "v4", auth });
 
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: config.spreadsheetId,
-    // A bare quoted sheet name (no cell range) still trips "Unable to parse
-    // range" for some sheet names — appending an explicit column range avoids it.
-    range: `${quoteSheetRange(config.sheetName)}!A:ZZ`,
-  });
+  let values: string[][] = [];
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: config.spreadsheetId,
+      // A bare quoted sheet name (no cell range) still trips "Unable to parse
+      // range" for some sheet names — appending an explicit column range avoids it.
+      range: `${quoteSheetRange(config.sheetName)}!A:ZZ`,
+    });
+    values = (res.data.values ?? []) as string[][];
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message?.includes("Unable to parse range")) {
+      // The sheet might not exist, or the name is slightly wrong. Let's fetch metadata to give a better error.
+      try {
+        const meta = await sheets.spreadsheets.get({ spreadsheetId: config.spreadsheetId });
+        const availableSheets = meta.data.sheets?.map((s) => s.properties?.title).filter(Boolean) || [];
+        if (!availableSheets.includes(config.sheetName)) {
+          throw new Error(
+            `Sheet "${config.sheetName}" not found. Available sheets: ${availableSheets.join(", ") || "none"}`
+          );
+        }
+      } catch {
+        // Ignore metadata fetch errors and throw the original error or a generic one
+      }
+      throw new Error(`Unable to parse range for sheet "${config.sheetName}". Please check the sheet name.`);
+    }
+    throw err;
+  }
 
-  const values = (res.data.values ?? []) as string[][];
   if (values.length === 0) return { items: [], resolvedMapping: config.columnMapping ?? {} };
 
   const [header, ...rows] = values;
