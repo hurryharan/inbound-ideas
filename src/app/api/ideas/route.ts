@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
 
     const uniqueIdeas = dedupeBatch(
       ideas.map((idea) => ({
-        ...idea,
+        idea,
         externalId: idea.id,
         url: idea.sourceItems[0]?.sourceItem.url,
         contentHash: idea.sourceItems[0]?.sourceItem.contentHash ?? idea.id,
@@ -50,6 +50,6 @@ export async function GET(req: NextRequest) {
       { externalIds: new Set(), urls: new Set(), contentHashes: new Set() }
     );
 
-    return NextResponse.json(uniqueIdeas.map(({ externalId: _externalId, url: _url, contentHash: _contentHash, ...idea }) => idea));
+    return NextResponse.json(uniqueIdeas.map(({ idea }) => idea));
   });
 }
