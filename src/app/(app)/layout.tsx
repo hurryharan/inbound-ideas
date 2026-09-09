@@ -4,7 +4,8 @@ import { SignOutButton } from "@/components/sign-out-button";
 const NAV_ITEMS = [
   { href: "/ideas", label: "Ideas" },
   { href: "/sessions", label: "Sessions" },
-  { href: "/settings", label: "Settings", activePaths: ["/sources", "/context", "/llm", "/usage"] },
+  { href: "/sources", label: "Sources" },
+  { href: "/settings", label: "Settings", activePaths: ["/context", "/llm", "/usage"] },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

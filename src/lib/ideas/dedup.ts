@@ -75,8 +75,9 @@ export function findIdeaDuplicateGroups<T extends { id: string; status: IdeaStat
 export async function dedupeIdeasForUser(userId: string): Promise<number> {
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+    // Ideas predate the source ownership relationship in some installations.
+    // This is a single-user app, so include those legacy/unlinked rows too.
     const ideas = await tx.idea.findMany({
-      where: { sourceItems: { some: { sourceItem: { source: { userId } } } } },
       include: {
         sourceItems: { select: { sourceItemId: true, sourceItem: { select: { url: true, contentHash: true } } } },
         contextDocuments: { select: { contextDocumentId: true, relevance: true } },

@@ -69,9 +69,14 @@ export async function DELETE(req: NextRequest) {
       const activeIdeas = await tx.idea.findMany({
         where: {
           status: { in: ["NEW", "SURFACED"] },
-          sourceItems: { some: { sourceItem: { source: { userId } } } },
         },
-        select: { id: true, sourceItems: { select: { sourceItemId: true } } },
+        select: {
+          id: true,
+          sourceItems: {
+            where: { sourceItem: { source: { userId } } },
+            select: { sourceItemId: true },
+          },
+        },
       });
       const ideaIds = activeIdeas.map((idea) => idea.id);
       const sourceItemIds = [...new Set(activeIdeas.flatMap((idea) => idea.sourceItems.map((link) => link.sourceItemId)))];

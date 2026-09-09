@@ -5,15 +5,12 @@ import { usePathname } from "next/navigation";
 
 const SECTIONS = [
   { href: "/settings", label: "General" },
-  { href: "/sources", label: "Sources" },
   { href: "/context", label: "Context" },
   { href: "/llm", label: "LLM" },
   { href: "/usage", label: "Usage" },
 ];
 
-/** Shared sub-navigation for the Settings area — Sources/Context/LLM/Usage
- * live at their own routes but are reached through Settings rather than
- * the main sidebar, so this keeps them feeling like one section. */
+/** Shared sub-navigation for Settings-only sections. */
 export function SettingsSubNav() {
   const pathname = usePathname();
 
