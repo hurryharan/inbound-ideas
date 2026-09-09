@@ -76,10 +76,14 @@ export async function refreshSource(
   source: Source
 ): Promise<{ createdCount: number; ideaCount: number }> {
   const config = source.config as unknown as SourceConfig;
-  const { items, resolvedMapping } = await fetchGoogleSheetItems(userId, config);
+  const { items, resolvedMapping, sheetName: resolvedSheetName } = await fetchGoogleSheetItems(userId, config);
 
-  if (JSON.stringify(resolvedMapping) !== JSON.stringify(config.columnMapping ?? {})) {
-    const updatedConfig: SourceConfig = { ...config, columnMapping: resolvedMapping };
+  const needsConfigUpdate =
+    JSON.stringify(resolvedMapping) !== JSON.stringify(config.columnMapping ?? {}) ||
+    resolvedSheetName !== config.sheetName;
+
+  if (needsConfigUpdate) {
+    const updatedConfig: SourceConfig = { ...config, columnMapping: resolvedMapping, sheetName: resolvedSheetName };
     await prisma.source.update({
       where: { id: source.id },
       data: { config: updatedConfig as unknown as Prisma.InputJsonValue },

@@ -9,7 +9,7 @@ import type { ColumnMapping, Source } from "@/lib/types";
 function AddSourceForm({ onCreated }: { onCreated: () => void }) {
   const [name, setName] = useState("");
   const [spreadsheetUrl, setSpreadsheetUrl] = useState("");
-  const [sheetName, setSheetName] = useState("Sheet1");
+  const [sheetName, setSheetName] = useState("");
   const [tags, setTags] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
   const [saving, setSaving] = useState(false);
@@ -22,12 +22,13 @@ function AddSourceForm({ onCreated }: { onCreated: () => void }) {
     try {
       await postJson("/api/sources", {
         name,
-        config: { spreadsheetUrl, sheetName },
+        config: { spreadsheetUrl, sheetName: sheetName || undefined },
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         priority,
       });
       setName("");
       setSpreadsheetUrl("");
+      setSheetName("");
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add source");
@@ -56,10 +57,11 @@ function AddSourceForm({ onCreated }: { onCreated: () => void }) {
           />
         </label>
         <label className="text-sm">
-          <span className="text-xs font-medium text-neutral-500">Sheet name</span>
+          <span className="text-xs font-medium text-neutral-500">Sheet tab name (optional)</span>
           <input
             value={sheetName}
             onChange={(e) => setSheetName(e.target.value)}
+            placeholder="auto-detected"
             className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1.5"
           />
         </label>
