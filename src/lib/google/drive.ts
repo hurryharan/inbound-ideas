@@ -55,13 +55,12 @@ export async function fetchDriveDocument(userId: string, fileId: string): Promis
   };
 }
 
-export async function listDriveFolderFiles(
-  userId: string,
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+
+async function listFolderChildren(
+  drive: ReturnType<typeof google.drive>,
   folderId: string
 ): Promise<{ id: string; name: string; mimeType: string }[]> {
-  const auth = await getGoogleAuthClient(userId);
-  const drive = google.drive({ version: "v3", auth });
-
   const files: { id: string; name: string; mimeType: string }[] = [];
   let pageToken: string | undefined;
 
@@ -80,6 +79,32 @@ export async function listDriveFolderFiles(
   return files;
 }
 
+/** Recursively lists every file under a folder, descending into subfolders. */
+export async function listDriveFolderFiles(
+  userId: string,
+  folderId: string
+): Promise<{ id: string; name: string; mimeType: string }[]> {
+  const auth = await getGoogleAuthClient(userId);
+  const drive = google.drive({ version: "v3", auth });
+
+  const files: { id: string; name: string; mimeType: string }[] = [];
+  const queue = [folderId];
+
+  while (queue.length > 0) {
+    const currentFolderId = queue.shift()!;
+    const children = await listFolderChildren(drive, currentFolderId);
+    for (const child of children) {
+      if (child.mimeType === FOLDER_MIME) {
+        queue.push(child.id);
+      } else {
+        files.push(child);
+      }
+    }
+  }
+
+  return files;
+}
+
 export async function fetchDriveFolderDocuments(
   userId: string,
   folderId: string
@@ -87,7 +112,6 @@ export async function fetchDriveFolderDocuments(
   const files = await listDriveFolderFiles(userId, folderId);
   const documents: DriveDocumentContent[] = [];
   for (const file of files) {
-    if (file.mimeType === "application/vnd.google-apps.folder") continue;
     try {
       documents.push(await fetchDriveDocument(userId, file.id));
     } catch {
