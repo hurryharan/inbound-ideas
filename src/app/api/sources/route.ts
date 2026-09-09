@@ -3,13 +3,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserId } from "@/lib/current-user";
 import { handleRoute } from "@/lib/api-helpers";
-import { extractSpreadsheetId } from "@/lib/sources/google-sheet";
+import { extractSpreadsheetId, inspectGoogleSheet } from "@/lib/sources/google-sheet";
 import type { SourceConfig } from "@/lib/sources/types";
 
 // Every Source is a Google Sheet (PRD discussion: LinkedIn/Twitter/etc.
 // exports get pasted into a sheet periodically, this just reads it —
 // there's no separate connector type to pick). Column mapping is
-// auto-detected on first refresh, so it's not required here.
+// auto-detected before the source is saved, so the UI can show the chosen
+// tab and mapping immediately after addition.
 const createSourceSchema = z.object({
   name: z.string().min(1),
   config: z.object({
@@ -39,10 +40,18 @@ export async function POST(req: NextRequest) {
     const userId = await getCurrentUserId();
     const body = createSourceSchema.parse(await req.json());
 
-    const config: SourceConfig = {
+    const baseConfig: SourceConfig = {
       spreadsheetId: extractSpreadsheetId(body.config.spreadsheetUrl),
       spreadsheetUrl: body.config.spreadsheetUrl,
       sheetName: body.config.sheetName,
+    };
+    const inspection = await inspectGoogleSheet(userId, baseConfig);
+    const config: SourceConfig = {
+      ...baseConfig,
+      sheetName: inspection.sheetName,
+      sheetNames: inspection.sheetNames,
+      columnMapping: inspection.resolvedMapping,
+      sheetTabs: inspection.sheetTabs,
     };
 
     const source = await prisma.source.create({

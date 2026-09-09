@@ -15,7 +15,7 @@ const COLUMN_ALIASES: Record<keyof ColumnMapping, string[]> = {
   title: ["title", "name", "headline", "subject"],
   body: ["idea", "content", "text", "body", "description", "post", "notes", "summary"],
   topic: ["topic", "category", "tag", "tags"],
-  status: ["status"],
+  status: ["status", "triage status", "comment status"],
   sourceUrl: ["url", "link", "source url", "source_url", "reference url", "post url"],
   author: ["author", "by", "posted by", "creator"],
 };
@@ -104,6 +104,97 @@ export interface FetchedSheetItems {
   items: NormalizedItem[];
   resolvedMapping: ColumnMapping;
   sheetName: string;
+  sheetNames: string[];
+  sheetTabs: SheetTabSchema[];
+}
+
+export interface SheetTabSchema {
+  sheetName: string;
+  headers: string[];
+  mapping: ColumnMapping;
+  rowCount: number;
+}
+
+interface SheetTabValues {
+  sheetName: string;
+  values: string[][];
+}
+
+interface InspectedSheetTab extends SheetTabSchema {
+  rows: string[][];
+}
+
+export interface GoogleSheetInspection {
+  sheetName: string;
+  header: string[];
+  rows: string[][];
+  resolvedMapping: ColumnMapping;
+  sheetNames: string[];
+  sheetTabs: SheetTabSchema[];
+  selectedTabs: InspectedSheetTab[];
+}
+
+function countMappableRows(header: string[], rows: string[][], mapping: ColumnMapping): number {
+  const titleIdx = mapping.title ? header.findIndex((column) => column.trim().toLowerCase() === mapping.title?.trim().toLowerCase()) : -1;
+  const bodyIdx = mapping.body ? header.findIndex((column) => column.trim().toLowerCase() === mapping.body?.trim().toLowerCase()) : -1;
+
+  return rows.filter((row) => Boolean(row[titleIdx]?.trim() || row[bodyIdx]?.trim())).length;
+}
+
+/**
+ * Examines every tab before selecting one. This keeps a header-only landing
+ * tab from winning over a later tab that actually contains importable rows.
+ */
+export function inspectSheetTabs(
+  tabs: SheetTabValues[],
+  preferredSheetName?: string,
+  providedMapping?: ColumnMapping,
+  selectedSheetNames?: string[]
+): GoogleSheetInspection {
+  const inspected = tabs.map(({ sheetName, values }) => {
+    const [headers = [], ...rows] = values;
+    const mapping = autoDetectColumnMapping(headers);
+    return { sheetName, headers, rows, mapping, rowCount: countMappableRows(headers, rows, mapping) };
+  });
+
+  if (inspected.length === 0) throw new Error("No sheet tabs found in this spreadsheet.");
+
+  const requestedName = preferredSheetName?.trim();
+  const primaryTab = requestedName
+    ? inspected.find((tab) => tab.sheetName.toLowerCase() === requestedName.toLowerCase())
+    : inspected.find((tab) => tab.rowCount > 0 && (tab.mapping.title || tab.mapping.body)) ||
+      inspected.find((tab) => tab.mapping.title || tab.mapping.body);
+
+  if (!primaryTab) {
+    if (requestedName) throw new Error(`Sheet tab "${requestedName}" was not found.`);
+    throw new Error("Couldn't find a title or content column in any sheet tab.");
+  }
+
+  const requestedTabs = selectedSheetNames?.map((name) => name.trim()).filter(Boolean) ?? [];
+  const selectedTabs = requestedTabs.length > 0
+    ? requestedTabs.map((name) => {
+        const tab = inspected.find((candidate) => candidate.sheetName.toLowerCase() === name.toLowerCase());
+        if (!tab) throw new Error(`Sheet tab "${name}" was not found.`);
+        return tab;
+      })
+    : [primaryTab];
+
+  const resolvedMapping = resolveColumnMapping(primaryTab.headers, providedMapping);
+  if (!resolvedMapping.title && !resolvedMapping.body) {
+    throw new Error(
+      `Couldn't find a title or content column in "${primaryTab.sheetName}"'s header (${primaryTab.headers.join(", ")}). Set the column mapping manually on this source.`
+    );
+  }
+
+  return {
+    sheetName: primaryTab.sheetName,
+    header: primaryTab.headers,
+    rows: primaryTab.rows,
+    resolvedMapping,
+    sheetNames: selectedTabs.map((tab) => tab.sheetName),
+    sheetTabs: inspected.map(({ sheetName, headers, mapping, rowCount }) => ({ sheetName, headers, mapping, rowCount })),
+    selectedTabs,
+  };
 }
 
 /**
@@ -116,77 +207,51 @@ export function quoteSheetRange(sheetName: string): string {
   return `'${sheetName.replace(/'/g, "''")}'`;
 }
 
-export async function fetchGoogleSheetItems(userId: string, config: SourceConfig): Promise<FetchedSheetItems> {
+export async function inspectGoogleSheet(userId: string, config: SourceConfig): Promise<GoogleSheetInspection> {
   const auth = await getGoogleAuthClient(userId);
   const sheets = google.sheets({ version: "v4", auth });
 
-  let targetSheetName = config.sheetName?.trim() || undefined;
-  let values: string[][] = [];
-
-  const fetchRange = async (name: string): Promise<string[][]> => {
-    const res = await sheets.spreadsheets.values.get({
+  let sheetNames: string[];
+  try {
+    const metadata = await sheets.spreadsheets.get({
       spreadsheetId: config.spreadsheetId,
-      range: `${quoteSheetRange(name)}!A:ZZ`,
+      fields: "sheets.properties.title",
     });
-    return (res.data.values ?? []) as string[][];
-  };
-
-  if (targetSheetName) {
-    try {
-      values = await fetchRange(targetSheetName);
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message?.includes("Unable to parse range")) {
-        targetSheetName = undefined; // Force auto-discovery
-      } else {
-        throw err;
-      }
-    }
+    sheetNames = metadata.data.sheets?.map((sheet) => sheet.properties?.title).filter((title): title is string => Boolean(title)) ?? [];
+  } catch (error) {
+    throw new Error(`Failed to access Google Spreadsheet (${config.spreadsheetId}). ${error instanceof Error ? error.message : ""}`);
   }
 
-  // Auto-discover tab name if targetSheetName is unset or range fetch failed
-  if (!targetSheetName) {
-    let availableSheets: string[] = [];
-    try {
-      const meta = await sheets.spreadsheets.get({ spreadsheetId: config.spreadsheetId });
-      availableSheets =
-        meta.data.sheets
-          ?.map((s) => s.properties?.title)
-          .filter((t): t is string => Boolean(t)) || [];
-    } catch (metaErr) {
-      throw new Error(`Failed to access Google Spreadsheet (${config.spreadsheetId}). ${metaErr instanceof Error ? metaErr.message : ""}`);
-    }
+  if (sheetNames.length === 0) throw new Error("No sheet tabs found in this spreadsheet.");
 
-    if (availableSheets.length === 0) {
-      throw new Error("No sheet tabs found in this spreadsheet.");
-    }
+  const values = await sheets.spreadsheets.values.batchGet({
+    spreadsheetId: config.spreadsheetId,
+    ranges: sheetNames.map((sheetName) => `${quoteSheetRange(sheetName)}!A:ZZ`),
+  });
+  const tabs: SheetTabValues[] = sheetNames.map((sheetName, index) => ({
+    sheetName,
+    values: (values.data.valueRanges?.[index]?.values ?? []).map((row) => row.map((cell) => String(cell ?? ""))),
+  }));
 
-    const match = config.sheetName
-      ? availableSheets.find((s) => s.toLowerCase() === config.sheetName.toLowerCase())
-      : undefined;
+  return inspectSheetTabs(tabs, config.sheetName, config.columnMapping, config.sheetNames);
+}
 
-    targetSheetName = match || availableSheets[0];
-    values = await fetchRange(targetSheetName);
-  }
+export async function fetchGoogleSheetItems(userId: string, config: SourceConfig): Promise<FetchedSheetItems> {
+  const inspection = await inspectGoogleSheet(userId, config);
 
-  if (values.length === 0) {
-    return { items: [], resolvedMapping: config.columnMapping ?? {}, sheetName: targetSheetName };
-  }
-
-  const [header, ...rows] = values;
-  const resolvedMapping = resolveColumnMapping(header, config.columnMapping);
-
-  if (!resolvedMapping.title && !resolvedMapping.body) {
-    throw new Error(
-      `Couldn't find a title or content column in "${targetSheetName}"'s header (${header.join(
-        ", "
-      )}). Set the column mapping manually on this source.`
-    );
-  }
+  const items = inspection.selectedTabs.flatMap((tab) => {
+    const mapping = tab.sheetName === inspection.sheetName
+      ? inspection.resolvedMapping
+      : resolveColumnMapping(tab.headers);
+    return mapSheetRowsToItems(config.spreadsheetId, tab.sheetName, tab.headers, tab.rows, mapping);
+  });
 
   return {
-    items: mapSheetRowsToItems(config.spreadsheetId, targetSheetName, header, rows, resolvedMapping),
-    resolvedMapping,
-    sheetName: targetSheetName,
+    items,
+    resolvedMapping: inspection.resolvedMapping,
+    sheetName: inspection.sheetName,
+    sheetNames: inspection.sheetNames,
+    sheetTabs: inspection.sheetTabs,
   };
 }
 

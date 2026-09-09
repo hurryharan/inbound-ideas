@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoDetectColumnMapping, mapSheetRowsToItems, quoteSheetRange, resolveColumnMapping } from "@/lib/sources/google-sheet";
+import { autoDetectColumnMapping, inspectSheetTabs, mapSheetRowsToItems, quoteSheetRange, resolveColumnMapping } from "@/lib/sources/google-sheet";
 
 describe("quoteSheetRange", () => {
   it("quotes sheet names containing hyphens, which the Sheets API otherwise rejects with 'Unable to parse range'", () => {
@@ -37,10 +37,47 @@ describe("autoDetectColumnMapping (every Source is a sheet — this is what make
     expect(mapping).toMatchObject({ title: "TITLE", body: "content" });
   });
 
+  it("detects triage status used by the source workbook", () => {
+    expect(autoDetectColumnMapping(["Triage Status"]).status).toBe("Triage Status");
+  });
+
   it("leaves a field undefined when nothing in the header matches", () => {
     const mapping = autoDetectColumnMapping(["Timestamp", "Random Column"]);
     expect(mapping.title).toBeUndefined();
     expect(mapping.body).toBeUndefined();
+  });
+});
+
+describe("inspectSheetTabs", () => {
+  it("skips a header-only first tab and selects the first populated tab with usable fields", () => {
+    const inspection = inspectSheetTabs([
+      { sheetName: "Pending", values: [["Post URL", "Author", "Topic", "Summary"]] },
+      { sheetName: "Processed", values: [["Post URL", "Author", "Topic", "Summary"], ["https://linkedin.example/post/1", "Hari", "AI", "A useful summary"]] },
+    ]);
+
+    expect(inspection.sheetName).toBe("Processed");
+    expect(inspection.resolvedMapping).toMatchObject({ body: "Summary", sourceUrl: "Post URL", author: "Author", topic: "Topic" });
+    expect(inspection.sheetTabs).toMatchObject([{ sheetName: "Pending", rowCount: 0 }, { sheetName: "Processed", rowCount: 1 }]);
+  });
+
+  it("honors an explicitly selected tab while retaining the full tab inventory", () => {
+    const inspection = inspectSheetTabs([
+      { sheetName: "Pending", values: [["Summary"]] },
+      { sheetName: "Research", values: [["Summary"], ["Research note"]] },
+    ], "Research");
+
+    expect(inspection.sheetName).toBe("Research");
+    expect(inspection.sheetTabs).toHaveLength(2);
+  });
+
+  it("retains every explicitly selected tab for multi-tab imports", () => {
+    const inspection = inspectSheetTabs([
+      { sheetName: "Processed", values: [["Summary"], ["Processed note"]] },
+      { sheetName: "Research", values: [["Summary"], ["Research note"]] },
+    ], undefined, undefined, ["Processed", "Research"]);
+
+    expect(inspection.sheetNames).toEqual(["Processed", "Research"]);
+    expect(inspection.selectedTabs.map((tab) => tab.sheetName)).toEqual(["Processed", "Research"]);
   });
 });
 
