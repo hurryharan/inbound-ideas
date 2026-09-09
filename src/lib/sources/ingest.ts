@@ -8,55 +8,52 @@ import type { Prisma, Source } from "@prisma/client";
 /**
  * Persists normalized+deduped items for a source and triggers idea
  * generation for anything new (PRD section 29: fetch → normalize →
- * dedupe → store → generate ideas → available in Inbox).
+ * dedupe → store → generate ideas → available in the Ideas funnel).
  */
 export async function ingestNormalizedItems(
   userId: string,
   source: Source,
   rawItems: NormalizedItem[]
 ): Promise<{ createdCount: number; ideaCount: number }> {
-  const existingItems = await prisma.sourceItem.findMany({
-    where: { sourceId: source.id },
-    select: { externalId: true, url: true, contentHash: true },
+  const candidates = rawItems.map((item) => ({ ...item, contentHash: contentHash(item.content) }));
+  const created = await prisma.$transaction(async (tx) => {
+    // Sources are refreshed concurrently from the Ideas funnel. A per-user
+    // advisory lock makes the global identity check and writes atomic.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+
+    const existingItems = await tx.sourceItem.findMany({
+      where: { source: { userId } },
+      select: { externalId: true, url: true, contentHash: true },
+    });
+    const existing: ExistingKeys = {
+      externalIds: new Set(existingItems.map((item) => item.externalId)),
+      urls: new Set(existingItems.map((item) => canonicalizeUrl(item.url)).filter((url): url is string => Boolean(url))),
+      contentHashes: new Set(existingItems.map((item) => item.contentHash)),
+    };
+    const newItems = dedupeBatch(candidates, existing);
+
+    return Promise.all(
+      newItems.map((item) =>
+        tx.sourceItem.create({
+          data: {
+            sourceId: source.id,
+            externalId: item.externalId,
+            title: item.title,
+            content: item.content,
+            url: item.url,
+            author: item.author,
+            contentHash: item.contentHash,
+            metadata: item.metadata as object,
+            createdAt: item.createdAt,
+          },
+        })
+      )
+    );
   });
 
-  const existing: ExistingKeys = {
-    externalIds: new Set(existingItems.map((i) => i.externalId)),
-    urls: new Set(existingItems.map((i) => canonicalizeUrl(i.url)).filter((u): u is string => Boolean(u))),
-    contentHashes: new Set(existingItems.map((i) => i.contentHash)),
-  };
-
-  const candidates = rawItems.map((item) => ({ ...item, hash: contentHash(item.content) }));
-  const deduped = dedupeBatch(
-    candidates.map((c) => ({ externalId: c.externalId, url: c.url, contentHash: c.hash })),
-    existing
-  );
-  const toCreate = candidates.filter((c) => deduped.some((d) => d.externalId === c.externalId));
-
-  if (toCreate.length === 0) {
-    await prisma.source.update({ where: { id: source.id }, data: { lastRefreshedAt: new Date() } });
-    return { createdCount: 0, ideaCount: 0 };
-  }
-
-  const created = await prisma.$transaction(
-    toCreate.map((item) =>
-      prisma.sourceItem.create({
-        data: {
-          sourceId: source.id,
-          externalId: item.externalId,
-          title: item.title,
-          content: item.content,
-          url: item.url,
-          author: item.author,
-          contentHash: item.hash,
-          metadata: item.metadata as object,
-          createdAt: item.createdAt,
-        },
-      })
-    )
-  );
-
   await prisma.source.update({ where: { id: source.id }, data: { lastRefreshedAt: new Date() } });
+
+  if (created.length === 0) return { createdCount: 0, ideaCount: 0 };
 
   const ideaCount = await generateIdeasForItems(
     userId,

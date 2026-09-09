@@ -46,4 +46,13 @@ describe("isDuplicate / dedupeBatch", () => {
     const result = dedupeBatch(batch, existing);
     expect(result.map((r) => r.externalId)).toEqual(["a", "c"]);
   });
+
+  it("keeps one item when separate tabs provide the same content under different URLs", () => {
+    const result = dedupeBatch([
+      { externalId: "processed:2", url: "https://example.com/processed", contentHash: contentHash("Same post body") },
+      { externalId: "research:8", url: "https://example.com/research", contentHash: contentHash("Same post body") },
+    ], { externalIds: new Set(), urls: new Set(), contentHashes: new Set() });
+
+    expect(result.map((item) => item.externalId)).toEqual(["processed:2"]);
+  });
 });

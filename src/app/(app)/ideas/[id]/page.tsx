@@ -68,8 +68,8 @@ export default function IdeaDetailPage({ params }: { params: Promise<{ id: strin
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
-      <Link href="/inbox" className="text-xs text-neutral-400 hover:text-neutral-700">
-        ← Back to Inbox
+      <Link href="/ideas" className="text-xs text-neutral-400 hover:text-neutral-700">
+        ← Back to Ideas
       </Link>
 
       <h1 className="mt-2 text-2xl font-semibold text-neutral-900">{idea.title}</h1>

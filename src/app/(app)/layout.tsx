@@ -2,7 +2,6 @@ import { NavLink } from "@/components/nav-link";
 import { SignOutButton } from "@/components/sign-out-button";
 
 const NAV_ITEMS = [
-  { href: "/inbox", label: "Inbox" },
   { href: "/ideas", label: "Ideas" },
   { href: "/sessions", label: "Sessions" },
   { href: "/settings", label: "Settings", activePaths: ["/sources", "/context", "/llm", "/usage"] },

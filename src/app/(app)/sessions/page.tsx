@@ -19,7 +19,7 @@ export default function SessionsPage() {
       <div className="mt-6 space-y-3">
         {sessions?.length === 0 && (
           <div className="rounded-lg border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-500">
-            No sessions yet — explore an idea from the Inbox to start one.
+            No sessions yet — explore an idea from Ideas to start one.
           </div>
         )}
         {sessions?.map((s) => (

@@ -25,7 +25,7 @@ function LoginForm() {
       setError(body.error ?? "Login failed.");
       return;
     }
-    router.push(params.get("next") ?? "/inbox");
+    router.push(params.get("next") ?? "/ideas");
     router.refresh();
   }
 

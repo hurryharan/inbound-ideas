@@ -7,6 +7,7 @@ import { extractTopics } from "./topics";
 import { selectRelevantContext } from "./context-matching";
 import { computeScore, estimateFactors } from "./scoring";
 import { generateIdea } from "./generate";
+import { canonicalizeUrl, dedupeBatch, type ExistingKeys } from "@/lib/sources/dedup";
 import type { LLMProvider, Prisma, Source, SourceItem, SourcePriority } from "@prisma/client";
 
 const SOURCE_PRIORITY_WEIGHT: Record<SourcePriority, number> = { LOW: 0.4, MEDIUM: 0.7, HIGH: 1.0 };
@@ -36,6 +37,21 @@ export async function generateIdeasForItems(
 ): Promise<number> {
   if (items.length === 0) return 0;
 
+  // A source item normally reaches this function only once. Keep a second,
+  // global identity gate here so historical records or concurrent jobs cannot
+  // create duplicate cards in the Ideas funnel.
+  const existingIdeaItems = await prisma.ideaSourceItem.findMany({
+    where: { sourceItem: { source: { userId } } },
+    select: { sourceItem: { select: { externalId: true, url: true, contentHash: true } } },
+  });
+  const existing: ExistingKeys = {
+    externalIds: new Set(existingIdeaItems.map(({ sourceItem }) => sourceItem.externalId)),
+    urls: new Set(existingIdeaItems.map(({ sourceItem }) => canonicalizeUrl(sourceItem.url)).filter((url): url is string => Boolean(url))),
+    contentHashes: new Set(existingIdeaItems.map(({ sourceItem }) => sourceItem.contentHash)),
+  };
+  const uniqueItems = dedupeBatch(items, existing);
+  if (uniqueItems.length === 0) return 0;
+
   const [contextDocs, weights, { provider, adapter: llm }] = await Promise.all([
     prisma.contextDocument.findMany({
       where: { contextSource: { userId, enabled: true } },
@@ -53,7 +69,7 @@ export async function generateIdeasForItems(
 
   let created = 0;
 
-  for (const item of items) {
+  for (const item of uniqueItems) {
     const topics = extractTopics(`${item.title} ${item.content}`, item.metadata && typeof item.metadata === "object" ? extractTagsFromMetadata(item.metadata) : []);
     const matched = selectRelevantContext(topics, contextCandidates);
     const matchedDocs = contextDocs.filter((d) => matched.some((m) => m.id === d.id));

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { handleRoute } from "@/lib/api-helpers";
 import type { Prisma, IdeaStatus } from "@prisma/client";
+import { dedupeBatch } from "@/lib/sources/dedup";
 
 export async function GET(req: NextRequest) {
   return handleRoute(async () => {
@@ -39,6 +40,16 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    return NextResponse.json(ideas);
+    const uniqueIdeas = dedupeBatch(
+      ideas.map((idea) => ({
+        ...idea,
+        externalId: idea.id,
+        url: idea.sourceItems[0]?.sourceItem.url,
+        contentHash: idea.sourceItems[0]?.sourceItem.contentHash ?? idea.id,
+      })),
+      { externalIds: new Set(), urls: new Set(), contentHashes: new Set() }
+    );
+
+    return NextResponse.json(uniqueIdeas.map(({ externalId: _externalId, url: _url, contentHash: _contentHash, ...idea }) => idea));
   });
 }
