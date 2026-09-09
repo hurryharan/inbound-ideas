@@ -130,19 +130,24 @@ export async function fetchGoogleSheetItems(userId: string, config: SourceConfig
     values = (res.data.values ?? []) as string[][];
   } catch (err: unknown) {
     if (err instanceof Error && err.message?.includes("Unable to parse range")) {
-      // The sheet might not exist, or the name is slightly wrong. Let's fetch metadata to give a better error.
+      // Fetch metadata to check actual sheet tab names.
+      let availableSheets: string[] = [];
       try {
         const meta = await sheets.spreadsheets.get({ spreadsheetId: config.spreadsheetId });
-        const availableSheets = meta.data.sheets?.map((s) => s.properties?.title).filter(Boolean) || [];
-        if (!availableSheets.includes(config.sheetName)) {
-          throw new Error(
-            `Sheet "${config.sheetName}" not found. Available sheets: ${availableSheets.join(", ") || "none"}`
-          );
-        }
+        availableSheets =
+          meta.data.sheets
+            ?.map((s) => s.properties?.title)
+            .filter((t): t is string => Boolean(t)) || [];
       } catch {
-        // Ignore metadata fetch errors and throw the original error or a generic one
+        // Unable to fetch metadata
       }
-      throw new Error(`Unable to parse range for sheet "${config.sheetName}". Please check the sheet name.`);
+
+      if (availableSheets.length > 0 && !availableSheets.includes(config.sheetName)) {
+        throw new Error(
+          `Sheet tab "${config.sheetName}" not found in spreadsheet. Available tabs: ${availableSheets.map((s) => `"${s}"`).join(", ")}`
+        );
+      }
+      throw new Error(`Unable to parse range for sheet "${config.sheetName}". Please check the sheet tab name.`);
     }
     throw err;
   }
