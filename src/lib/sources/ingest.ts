@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { NormalizedItem, SourceConfig } from "./types";
-import { contentHash, dedupeBatch, type ExistingKeys } from "./dedup";
+import { canonicalizeUrl, contentHash, dedupeBatch, type ExistingKeys } from "./dedup";
 import { fetchGoogleSheetItems } from "./google-sheet";
 import { generateIdeasForItems } from "@/lib/ideas/pipeline";
 import type { Prisma, Source } from "@prisma/client";
@@ -22,7 +22,7 @@ export async function ingestNormalizedItems(
 
   const existing: ExistingKeys = {
     externalIds: new Set(existingItems.map((i) => i.externalId)),
-    urls: new Set(existingItems.map((i) => i.url).filter((u): u is string => Boolean(u))),
+    urls: new Set(existingItems.map((i) => canonicalizeUrl(i.url)).filter((u): u is string => Boolean(u))),
     contentHashes: new Set(existingItems.map((i) => i.contentHash)),
   };
 

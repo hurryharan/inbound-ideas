@@ -16,6 +16,7 @@ const createSourceSchema = z.object({
   config: z.object({
     spreadsheetUrl: z.string().min(1),
     sheetName: z.string().optional().default(""),
+    sheetNames: z.array(z.string().min(1)).min(1).optional(),
   }),
   tags: z.array(z.string()).default([]),
   priority: z.enum(["LOW", "MEDIUM", "HIGH"]).default("MEDIUM"),
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
       spreadsheetId: extractSpreadsheetId(body.config.spreadsheetUrl),
       spreadsheetUrl: body.config.spreadsheetUrl,
       sheetName: body.config.sheetName,
+      sheetNames: body.config.sheetNames,
     };
     const inspection = await inspectGoogleSheet(userId, baseConfig);
     const config: SourceConfig = {

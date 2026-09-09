@@ -4,31 +4,68 @@ import { useState } from "react";
 import useSWR from "swr";
 import { fetchJson, postJson } from "@/lib/api-client";
 import { SettingsSubNav } from "@/components/settings-subnav";
-import type { ColumnMapping, Source } from "@/lib/types";
+import type { ColumnMapping, SheetTabSchema, Source } from "@/lib/types";
+
+interface SourceInspection {
+  sheetName: string;
+  sheetNames: string[];
+  columnMapping: ColumnMapping;
+  sheetTabs: SheetTabSchema[];
+}
 
 function AddSourceForm({ onCreated }: { onCreated: () => void }) {
   const [name, setName] = useState("");
   const [spreadsheetUrl, setSpreadsheetUrl] = useState("");
-  const [sheetName, setSheetName] = useState("");
+  const [inspection, setInspection] = useState<SourceInspection | null>(null);
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [tags, setTags] = useState("");
   const [priority, setPriority] = useState("MEDIUM");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  async function inspectTabs() {
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await postJson<SourceInspection>("/api/sources/inspect", { spreadsheetUrl });
+      setInspection(result);
+      setSheetNames(result.sheetNames);
+    } catch (err) {
+      setInspection(null);
+      setSheetNames([]);
+      setError(err instanceof Error ? err.message : "Failed to inspect sheet tabs");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function toggleSheet(sheetTab: string) {
+    setSheetNames((current) => current.includes(sheetTab) ? current.filter((name) => name !== sheetTab) : [...current, sheetTab]);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!inspection) {
+      setError("Inspect the sheet tabs before adding this source.");
+      return;
+    }
+    if (sheetNames.length === 0) {
+      setError("Select at least one sheet tab to import.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       await postJson("/api/sources", {
         name,
-        config: { spreadsheetUrl, sheetName: sheetName || undefined },
+        config: { spreadsheetUrl, sheetName: sheetNames[0], sheetNames },
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         priority,
       });
       setName("");
       setSpreadsheetUrl("");
-      setSheetName("");
+      setInspection(null);
+      setSheetNames([]);
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add source");
@@ -42,41 +79,53 @@ function AddSourceForm({ onCreated }: { onCreated: () => void }) {
       <p className="text-xs text-neutral-500">
         Every source is a Google Sheet — export LinkedIn saved posts, Twitter bookmarks, or anything else into a
         sheet periodically, and point this at it. Title/content/URL columns are detected automatically from the
-        header row; you can remap them after the first refresh if detection gets it wrong.
+        header row before the source is added; you can remap them later if detection gets it wrong.
       </p>
 
-      <div className="grid grid-cols-2 gap-3">
-        <label className="text-sm">
-          <span className="text-xs font-medium text-neutral-500">Name</span>
-          <input
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. LinkedIn Saved Posts"
-            className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1.5"
-          />
-        </label>
-        <label className="text-sm">
-          <span className="text-xs font-medium text-neutral-500">Sheet tab name (optional)</span>
-          <input
-            value={sheetName}
-            onChange={(e) => setSheetName(e.target.value)}
-            placeholder="auto-detected"
-            className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1.5"
-          />
-        </label>
-      </div>
+      <label className="block text-sm">
+        <span className="text-xs font-medium text-neutral-500">Name</span>
+        <input
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. LinkedIn Saved Posts"
+          className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1.5"
+        />
+      </label>
 
       <label className="block text-sm">
         <span className="text-xs font-medium text-neutral-500">Spreadsheet URL</span>
         <input
           required
           value={spreadsheetUrl}
-          onChange={(e) => setSpreadsheetUrl(e.target.value)}
+          onChange={(e) => { setSpreadsheetUrl(e.target.value); setInspection(null); setSheetNames([]); }}
           placeholder="https://docs.google.com/spreadsheets/d/..."
           className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1.5"
         />
       </label>
+
+      <button
+        type="button"
+        onClick={inspectTabs}
+        disabled={!spreadsheetUrl || saving}
+        className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+      >
+        {saving ? "Inspecting…" : "Inspect tabs"}
+      </button>
+
+      {inspection && (
+        <fieldset>
+          <legend className="text-xs font-medium text-neutral-500">Import tabs</legend>
+          <div className="mt-1 grid grid-cols-2 gap-2">
+            {inspection.sheetTabs.map((tab) => (
+              <label key={tab.sheetName} className="flex items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1.5 text-xs text-neutral-700">
+                <input type="checkbox" checked={sheetNames.includes(tab.sheetName)} onChange={() => toggleSheet(tab.sheetName)} />
+                <span>{tab.sheetName} ({tab.rowCount})</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <label className="text-sm">
