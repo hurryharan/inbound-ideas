@@ -6,28 +6,28 @@ import { fetchJson, postJson } from "@/lib/api-client";
 import type { Idea, IdeaStatus, Source } from "@/lib/types";
 import { IdeaCard } from "@/components/idea-card";
 
-type IdeaView = IdeaStatus | "ALL" | "FUNNEL";
+type IdeaView = IdeaStatus | "ACTIVE" | "ALL";
 
 const STATUS_TABS: { label: string; value: IdeaView }[] = [
-  { label: "Funnel", value: "FUNNEL" },
-  { label: "All", value: "ALL" },
-  { label: "Surfaced", value: "SURFACED" },
+  { label: "Active", value: "ACTIVE" },
   { label: "Exploring", value: "EXPLORING" },
   { label: "Explored", value: "EXPLORED" },
   { label: "Parked", value: "PARKED" },
   { label: "Archived", value: "ARCHIVED" },
+  { label: "All", value: "ALL" },
 ];
 
 export default function IdeasPage() {
-  const [status, setStatus] = useState<IdeaView>("FUNNEL");
+  const [status, setStatus] = useState<IdeaView>("ACTIVE");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"score" | "recent">("score");
   const [refreshing, setRefreshing] = useState(false);
+  const [deduplicating, setDeduplicating] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const params = new URLSearchParams();
-  if (status === "FUNNEL") params.set("status", "NEW,SURFACED");
+  if (status === "ACTIVE") params.set("status", "NEW,SURFACED");
   else if (status !== "ALL") params.set("status", status);
   if (search) params.set("search", search);
   params.set("sort", sort);
@@ -53,17 +53,31 @@ export default function IdeasPage() {
   }
 
   async function clearFunnel() {
-    if (!confirm("Clear all New and Surfaced ideas? Explored, parked, and archived ideas will remain.")) return;
+    if (!confirm("Clear all active ideas? Their source records will be reset so Refresh Sources can rebuild them. Explored, parked, and archived ideas will remain.")) return;
     setClearing(true);
     setMessage(null);
     try {
-      const result = await postJson<{ deletedCount: number }>("/api/ideas", { scope: "FUNNEL" }, "DELETE");
+      const result = await postJson<{ deletedCount: number; deletedSourceItemCount: number }>("/api/ideas", { scope: "FUNNEL" }, "DELETE");
       await mutate();
-      setMessage(`Cleared ${result.deletedCount} funnel item${result.deletedCount === 1 ? "" : "s"}.`);
+      setMessage(`Cleared ${result.deletedCount} active idea${result.deletedCount === 1 ? "" : "s"}. They can return on the next source refresh.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Failed to clear the funnel.");
     } finally {
       setClearing(false);
+    }
+  }
+
+  async function deduplicateAll() {
+    setDeduplicating(true);
+    setMessage(null);
+    try {
+      const result = await postJson<{ deduplicatedCount: number }>("/api/ideas", {});
+      await mutate();
+      setMessage(result.deduplicatedCount > 0 ? `Merged ${result.deduplicatedCount} duplicate idea${result.deduplicatedCount === 1 ? "" : "s"} across all views.` : "No duplicate ideas found.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to deduplicate ideas.");
+    } finally {
+      setDeduplicating(false);
     }
   }
 
@@ -77,17 +91,24 @@ export default function IdeasPage() {
         <div className="flex shrink-0 gap-2">
           <button
             onClick={refreshAll}
-            disabled={refreshing || clearing}
+            disabled={refreshing || deduplicating || clearing}
             className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
           >
             {refreshing ? "Refreshing…" : "Refresh Sources"}
           </button>
           <button
+            onClick={deduplicateAll}
+            disabled={refreshing || deduplicating || clearing}
+            className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+          >
+            {deduplicating ? "Deduplicating..." : "Deduplicate all"}
+          </button>
+          <button
             onClick={clearFunnel}
-            disabled={refreshing || clearing}
+            disabled={refreshing || deduplicating || clearing}
             className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
           >
-            {clearing ? "Clearing…" : "Clear funnel"}
+            {clearing ? "Clearing…" : "Clear active"}
           </button>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { handleRoute } from "@/lib/api-helpers";
 import type { Prisma, IdeaStatus } from "@prisma/client";
 import { dedupeBatch } from "@/lib/sources/dedup";
 import { getCurrentUserId } from "@/lib/current-user";
+import { dedupeIdeasForUser } from "@/lib/ideas/dedup";
 import { z } from "zod";
 
 const clearFunnelSchema = z.object({ scope: z.literal("FUNNEL") });
@@ -62,12 +63,32 @@ export async function DELETE(req: NextRequest) {
   return handleRoute(async () => {
     const userId = await getCurrentUserId();
     clearFunnelSchema.parse(await req.json());
-    const deleted = await prisma.idea.deleteMany({
-      where: {
-        status: { in: ["NEW", "SURFACED"] },
-        sourceItems: { some: { sourceItem: { source: { userId } } } },
-      },
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+
+      const activeIdeas = await tx.idea.findMany({
+        where: {
+          status: { in: ["NEW", "SURFACED"] },
+          sourceItems: { some: { sourceItem: { source: { userId } } } },
+        },
+        select: { id: true, sourceItems: { select: { sourceItemId: true } } },
+      });
+      const ideaIds = activeIdeas.map((idea) => idea.id);
+      const sourceItemIds = [...new Set(activeIdeas.flatMap((idea) => idea.sourceItems.map((link) => link.sourceItemId)))];
+
+      const deleted = ideaIds.length ? await tx.idea.deleteMany({ where: { id: { in: ideaIds } } }) : { count: 0 };
+      const deletedSourceItems = sourceItemIds.length
+        ? await tx.sourceItem.deleteMany({ where: { id: { in: sourceItemIds }, ideaLinks: { none: {} } } })
+        : { count: 0 };
+
+      return { deletedCount: deleted.count, deletedSourceItemCount: deletedSourceItems.count };
     });
-    return { deletedCount: deleted.count };
+  });
+}
+
+export async function POST() {
+  return handleRoute(async () => {
+    const userId = await getCurrentUserId();
+    return { deduplicatedCount: await dedupeIdeasForUser(userId) };
   });
 }

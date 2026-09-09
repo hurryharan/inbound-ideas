@@ -25,4 +25,16 @@ describe("findIdeaDuplicateGroups", () => {
 
     expect(groups[0].keep.id).toBe("explored");
   });
+
+  it("consolidates duplicate ideas even after they have been archived", () => {
+    const hash = contentHash("Same archived material");
+    const groups = findIdeaDuplicateGroups([
+      { id: "first-archive", status: "ARCHIVED", createdAt, lastExploredAt: null, sourceItems: [{ sourceItem: { url: null, contentHash: hash } }] },
+      { id: "second-archive", status: "ARCHIVED", createdAt: new Date("2026-09-10T00:00:00Z"), lastExploredAt: null, sourceItems: [{ sourceItem: { url: null, contentHash: hash } }] },
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].keep.id).toBe("first-archive");
+    expect(groups[0].duplicates.map((idea) => idea.id)).toEqual(["second-archive"]);
+  });
 });
