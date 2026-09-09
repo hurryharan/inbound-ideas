@@ -14,7 +14,7 @@ const createSourceSchema = z.object({
   name: z.string().min(1),
   config: z.object({
     spreadsheetUrl: z.string().min(1),
-    sheetName: z.string().min(1).default("Sheet1"),
+    sheetName: z.string().optional().default(""),
   }),
   tags: z.array(z.string()).default([]),
   priority: z.enum(["LOW", "MEDIUM", "HIGH"]).default("MEDIUM"),

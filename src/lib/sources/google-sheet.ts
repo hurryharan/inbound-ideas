@@ -103,6 +103,7 @@ export function mapSheetRowsToItems(
 export interface FetchedSheetItems {
   items: NormalizedItem[];
   resolvedMapping: ColumnMapping;
+  sheetName: string;
 }
 
 /**
@@ -119,55 +120,73 @@ export async function fetchGoogleSheetItems(userId: string, config: SourceConfig
   const auth = await getGoogleAuthClient(userId);
   const sheets = google.sheets({ version: "v4", auth });
 
+  let targetSheetName = config.sheetName?.trim() || undefined;
   let values: string[][] = [];
-  try {
+
+  const fetchRange = async (name: string): Promise<string[][]> => {
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: config.spreadsheetId,
-      // A bare quoted sheet name (no cell range) still trips "Unable to parse
-      // range" for some sheet names — appending an explicit column range avoids it.
-      range: `${quoteSheetRange(config.sheetName)}!A:ZZ`,
+      range: `${quoteSheetRange(name)}!A:ZZ`,
     });
-    values = (res.data.values ?? []) as string[][];
-  } catch (err: unknown) {
-    if (err instanceof Error && err.message?.includes("Unable to parse range")) {
-      // Fetch metadata to check actual sheet tab names.
-      let availableSheets: string[] = [];
-      try {
-        const meta = await sheets.spreadsheets.get({ spreadsheetId: config.spreadsheetId });
-        availableSheets =
-          meta.data.sheets
-            ?.map((s) => s.properties?.title)
-            .filter((t): t is string => Boolean(t)) || [];
-      } catch {
-        // Unable to fetch metadata
-      }
+    return (res.data.values ?? []) as string[][];
+  };
 
-      if (availableSheets.length > 0 && !availableSheets.includes(config.sheetName)) {
-        throw new Error(
-          `Sheet tab "${config.sheetName}" not found in spreadsheet. Available tabs: ${availableSheets.map((s) => `"${s}"`).join(", ")}`
-        );
+  if (targetSheetName) {
+    try {
+      values = await fetchRange(targetSheetName);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message?.includes("Unable to parse range")) {
+        targetSheetName = undefined; // Force auto-discovery
+      } else {
+        throw err;
       }
-      throw new Error(`Unable to parse range for sheet "${config.sheetName}". Please check the sheet tab name.`);
     }
-    throw err;
   }
 
-  if (values.length === 0) return { items: [], resolvedMapping: config.columnMapping ?? {} };
+  // Auto-discover tab name if targetSheetName is unset or range fetch failed
+  if (!targetSheetName) {
+    let availableSheets: string[] = [];
+    try {
+      const meta = await sheets.spreadsheets.get({ spreadsheetId: config.spreadsheetId });
+      availableSheets =
+        meta.data.sheets
+          ?.map((s) => s.properties?.title)
+          .filter((t): t is string => Boolean(t)) || [];
+    } catch (metaErr) {
+      throw new Error(`Failed to access Google Spreadsheet (${config.spreadsheetId}). ${metaErr instanceof Error ? metaErr.message : ""}`);
+    }
+
+    if (availableSheets.length === 0) {
+      throw new Error("No sheet tabs found in this spreadsheet.");
+    }
+
+    const match = config.sheetName
+      ? availableSheets.find((s) => s.toLowerCase() === config.sheetName.toLowerCase())
+      : undefined;
+
+    targetSheetName = match || availableSheets[0];
+    values = await fetchRange(targetSheetName);
+  }
+
+  if (values.length === 0) {
+    return { items: [], resolvedMapping: config.columnMapping ?? {}, sheetName: targetSheetName };
+  }
 
   const [header, ...rows] = values;
   const resolvedMapping = resolveColumnMapping(header, config.columnMapping);
 
   if (!resolvedMapping.title && !resolvedMapping.body) {
     throw new Error(
-      `Couldn't find a title or content column in "${config.sheetName}"'s header (${header.join(
+      `Couldn't find a title or content column in "${targetSheetName}"'s header (${header.join(
         ", "
       )}). Set the column mapping manually on this source.`
     );
   }
 
   return {
-    items: mapSheetRowsToItems(config.spreadsheetId, config.sheetName, header, rows, resolvedMapping),
+    items: mapSheetRowsToItems(config.spreadsheetId, targetSheetName, header, rows, resolvedMapping),
     resolvedMapping,
+    sheetName: targetSheetName,
   };
 }
 
