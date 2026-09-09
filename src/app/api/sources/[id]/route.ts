@@ -21,6 +21,7 @@ const updateSourceSchema = z.object({
     .object({
       spreadsheetUrl: z.string().min(1).optional(),
       sheetName: z.string().min(1).optional(),
+      sheetNames: z.array(z.string().min(1)).min(1).optional(),
       // Partial: only the fields being remapped need to be sent (see
       // PRD section 12 — "if the sheet changes structure, the user
       // should be able to remap columns").
@@ -49,6 +50,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...existingConfig,
         ...(body.config.spreadsheetUrl ? { spreadsheetUrl: body.config.spreadsheetUrl, spreadsheetId: extractSpreadsheetId(body.config.spreadsheetUrl) } : {}),
         ...(body.config.sheetName ? { sheetName: body.config.sheetName } : {}),
+        ...(body.config.sheetNames ? { sheetNames: body.config.sheetNames, sheetName: body.config.sheetNames[0] } : {}),
         ...(body.config.columnMapping
           ? { columnMapping: { ...existingConfig.columnMapping, ...body.config.columnMapping } as ColumnMapping }
           : {}),

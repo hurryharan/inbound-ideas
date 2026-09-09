@@ -21,9 +21,18 @@ export interface ColumnMapping {
   author?: string;
 }
 
+export interface SheetTabSchema {
+  sheetName: string;
+  headers: string[];
+  mapping: ColumnMapping;
+  rowCount: number;
+}
+
 export interface SourceConfig {
   spreadsheetId: string;
   spreadsheetUrl?: string;
   sheetName: string;
+  sheetNames?: string[];
   columnMapping?: ColumnMapping;
+  sheetTabs?: SheetTabSchema[];
 }

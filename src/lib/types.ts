@@ -20,6 +20,13 @@ export interface ColumnMapping {
   author?: string;
 }
 
+export interface SheetTabSchema {
+  sheetName: string;
+  headers: string[];
+  mapping: ColumnMapping;
+  rowCount: number;
+}
+
 export interface SourceItemRef {
   id: string;
   title: string;
@@ -60,7 +67,9 @@ export interface SourceConfig {
   spreadsheetId: string;
   spreadsheetUrl?: string;
   sheetName: string;
+  sheetNames?: string[];
   columnMapping?: ColumnMapping;
+  sheetTabs?: SheetTabSchema[];
 }
 
 export interface Source {

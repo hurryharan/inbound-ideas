@@ -118,13 +118,23 @@ function EditSourceForm({ source, onSaved, onCancel }: { source: Source; onSaved
   const [name, setName] = useState(source.name);
   const [spreadsheetUrl, setSpreadsheetUrl] = useState(source.config.spreadsheetUrl ?? "");
   const [sheetName, setSheetName] = useState(source.config.sheetName ?? "");
+  const [sheetNames, setSheetNames] = useState(source.config.sheetNames ?? [source.config.sheetName].filter(Boolean));
   const [tags, setTags] = useState(source.tags.join(", "));
   const [priority, setPriority] = useState(source.priority);
   const [mapping, setMapping] = useState<ColumnMapping>(source.config.columnMapping ?? {});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const detectedColumns = source.config.sheetTabs?.find((tab) => tab.sheetName === sheetNames[0])?.headers ?? [];
+
+  function toggleSheet(sheetTab: string) {
+    setSheetNames((current) => current.includes(sheetTab) ? current.filter((name) => name !== sheetTab) : [...current, sheetTab]);
+  }
 
   async function save() {
+    if (source.config.sheetTabs?.length && sheetNames.length === 0) {
+      setError("Select at least one sheet tab to import.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -132,7 +142,7 @@ function EditSourceForm({ source, onSaved, onCancel }: { source: Source; onSaved
         `/api/sources/${source.id}`,
         {
           name,
-          config: { spreadsheetUrl, sheetName, columnMapping: mapping },
+          config: { spreadsheetUrl, sheetName: sheetNames[0] ?? sheetName, sheetNames, columnMapping: mapping },
           tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
           priority,
         },
@@ -148,16 +158,28 @@ function EditSourceForm({ source, onSaved, onCancel }: { source: Source; onSaved
 
   return (
     <div className="mt-3 space-y-3 rounded-md bg-neutral-50 p-3">
-      <div className="grid grid-cols-2 gap-2">
-        <label className="text-xs text-neutral-500">
-          Name
-          <input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
-        </label>
+      <label className="block text-xs text-neutral-500">
+        Name
+        <input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
+      </label>
+      {source.config.sheetTabs?.length ? (
+        <fieldset>
+          <legend className="text-xs font-medium text-neutral-500">Import tabs</legend>
+          <div className="mt-1 grid grid-cols-2 gap-2">
+            {source.config.sheetTabs.map((tab) => (
+              <label key={tab.sheetName} className="flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-xs text-neutral-700">
+                <input type="checkbox" checked={sheetNames.includes(tab.sheetName)} onChange={() => toggleSheet(tab.sheetName)} />
+                <span>{tab.sheetName} ({tab.rowCount})</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : (
         <label className="text-xs text-neutral-500">
           Sheet name
           <input value={sheetName} onChange={(e) => setSheetName(e.target.value)} className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
         </label>
-      </div>
+      )}
       <label className="block text-xs text-neutral-500">
         Spreadsheet URL
         <input value={spreadsheetUrl} onChange={(e) => setSpreadsheetUrl(e.target.value)} className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm" />
@@ -182,12 +204,14 @@ function EditSourceForm({ source, onSaved, onCancel }: { source: Source; onSaved
         {MAPPING_FIELDS.map(({ key, label }) => (
           <label key={key} className="text-xs text-neutral-500">
             {label}
-            <input
+            <select
               value={mapping[key] ?? ""}
               onChange={(e) => setMapping((m) => ({ ...m, [key]: e.target.value || undefined }))}
-              placeholder="auto-detected"
               className="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm"
-            />
+            >
+              <option value="">auto-detected</option>
+              {detectedColumns.map((column) => <option key={column} value={column}>{column}</option>)}
+            </select>
           </label>
         ))}
       </div>
@@ -244,6 +268,7 @@ function SourceRow({ source, onChange }: { source: Source; onChange: () => void 
   const mappingSummary = mapping
     ? MAPPING_FIELDS.filter(({ key }) => mapping[key]).map(({ label, key }) => `${label.replace(" column", "")} → "${mapping[key]}"`).join(", ")
     : null;
+  const selectedTabs = source.config.sheetTabs?.filter((tab) => (source.config.sheetNames ?? [source.config.sheetName]).includes(tab.sheetName)) ?? [];
 
   return (
     <div className="rounded-lg border border-neutral-200 bg-white p-4">
@@ -261,6 +286,12 @@ function SourceRow({ source, onChange }: { source: Source; onChange: () => void 
       </div>
 
       {mappingSummary && !editing && <p className="mt-2 text-xs text-neutral-400">Detected columns: {mappingSummary}</p>}
+      {selectedTabs.length > 0 && !editing && (
+        <div className="mt-2 text-xs text-neutral-400">
+          <p>Importing from {selectedTabs.map((tab) => tab.sheetName).join(", ")} after checking {source.config.sheetTabs?.length} tab{source.config.sheetTabs?.length === 1 ? "" : "s"}.</p>
+          <p className="mt-1">Available columns: {selectedTabs[0].headers.join(", ")}</p>
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
