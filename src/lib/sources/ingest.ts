@@ -3,6 +3,7 @@ import type { NormalizedItem, SourceConfig } from "./types";
 import { canonicalizeUrl, contentHash, dedupeBatch, type ExistingKeys } from "./dedup";
 import { fetchGoogleSheetItems } from "./google-sheet";
 import { generateIdeasForItems } from "@/lib/ideas/pipeline";
+import { dedupeIdeasForUser } from "@/lib/ideas/dedup";
 import type { Prisma, Source } from "@prisma/client";
 
 /**
@@ -71,7 +72,7 @@ export async function ingestNormalizedItems(
 export async function refreshSource(
   userId: string,
   source: Source
-): Promise<{ createdCount: number; ideaCount: number }> {
+): Promise<{ createdCount: number; ideaCount: number; deduplicatedCount: number }> {
   const config = source.config as unknown as SourceConfig;
   const { items, resolvedMapping, sheetName: resolvedSheetName, sheetNames: resolvedSheetNames, sheetTabs } = await fetchGoogleSheetItems(userId, config);
 
@@ -89,5 +90,6 @@ export async function refreshSource(
     });
   }
 
-  return ingestNormalizedItems(userId, source, items);
+  const result = await ingestNormalizedItems(userId, source, items);
+  return { ...result, deduplicatedCount: await dedupeIdeasForUser(userId) };
 }

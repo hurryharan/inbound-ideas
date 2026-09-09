@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { handleRoute } from "@/lib/api-helpers";
 import type { Prisma, IdeaStatus } from "@prisma/client";
 import { dedupeBatch } from "@/lib/sources/dedup";
+import { getCurrentUserId } from "@/lib/current-user";
+import { z } from "zod";
+
+const clearFunnelSchema = z.object({ scope: z.literal("FUNNEL") });
 
 export async function GET(req: NextRequest) {
   return handleRoute(async () => {
@@ -51,5 +55,19 @@ export async function GET(req: NextRequest) {
     );
 
     return NextResponse.json(uniqueIdeas.map(({ idea }) => idea));
+  });
+}
+
+export async function DELETE(req: NextRequest) {
+  return handleRoute(async () => {
+    const userId = await getCurrentUserId();
+    clearFunnelSchema.parse(await req.json());
+    const deleted = await prisma.idea.deleteMany({
+      where: {
+        status: { in: ["NEW", "SURFACED"] },
+        sourceItems: { some: { sourceItem: { source: { userId } } } },
+      },
+    });
+    return { deletedCount: deleted.count };
   });
 }

@@ -23,6 +23,8 @@ export default function IdeasPage() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"score" | "recent">("score");
   const [refreshing, setRefreshing] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   const params = new URLSearchParams();
   if (status === "FUNNEL") params.set("status", "NEW,SURFACED");
@@ -37,11 +39,31 @@ export default function IdeasPage() {
   async function refreshAll() {
     if (!sources || sources.length === 0) return;
     setRefreshing(true);
+    setMessage(null);
     try {
-      await Promise.allSettled(sources.filter((source) => source.enabled).map((source) => postJson(`/api/sources/${source.id}/refresh`, {})));
+      const results = await Promise.allSettled<{ createdCount: number; ideaCount: number; deduplicatedCount: number }>(
+        sources.filter((source) => source.enabled).map((source) => postJson(`/api/sources/${source.id}/refresh`, {}))
+      );
       await mutate();
+      const deduplicatedCount = results.reduce((count, result) => count + (result.status === "fulfilled" ? result.value.deduplicatedCount : 0), 0);
+      setMessage(deduplicatedCount > 0 ? `Merged ${deduplicatedCount} duplicate idea${deduplicatedCount === 1 ? "" : "s"}.` : "Sources refreshed. No duplicate ideas found.");
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  async function clearFunnel() {
+    if (!confirm("Clear all New and Surfaced ideas? Explored, parked, and archived ideas will remain.")) return;
+    setClearing(true);
+    setMessage(null);
+    try {
+      const result = await postJson<{ deletedCount: number }>("/api/ideas", { scope: "FUNNEL" }, "DELETE");
+      await mutate();
+      setMessage(`Cleared ${result.deletedCount} funnel item${result.deletedCount === 1 ? "" : "s"}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to clear the funnel.");
+    } finally {
+      setClearing(false);
     }
   }
 
@@ -52,14 +74,25 @@ export default function IdeasPage() {
           <h1 className="text-xl font-semibold text-neutral-900">Ideas</h1>
           <p className="mt-1 text-sm text-neutral-500">One funnel for sourced material, surfaced ideas, and everything you have already explored.</p>
         </div>
-        <button
-          onClick={refreshAll}
-          disabled={refreshing}
-          className="shrink-0 rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
-        >
-          {refreshing ? "Refreshing…" : "Refresh Sources"}
-        </button>
+        <div className="flex shrink-0 gap-2">
+          <button
+            onClick={refreshAll}
+            disabled={refreshing || clearing}
+            className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+          >
+            {refreshing ? "Refreshing…" : "Refresh Sources"}
+          </button>
+          <button
+            onClick={clearFunnel}
+            disabled={refreshing || clearing}
+            className="rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+          >
+            {clearing ? "Clearing…" : "Clear funnel"}
+          </button>
+        </div>
       </div>
+
+      {message && <p className="mt-3 text-sm text-neutral-500">{message}</p>}
 
       <div className="mt-4 flex flex-wrap gap-1">
         {STATUS_TABS.map((tab) => (
