@@ -50,7 +50,9 @@ export async function fetchDriveDocument(userId: string, fileId: string): Promis
   return {
     fileId,
     title: meta.data.name ?? fileId,
-    content,
+    // Postgres text columns reject null bytes; the raw-content fallback
+    // above can pull in binary files (PDFs, images) that contain them.
+    content: content.split(String.fromCharCode(0)).join(""),
     url: meta.data.webViewLink ?? `https://drive.google.com/file/d/${fileId}/view`,
   };
 }
